@@ -295,16 +295,37 @@ function saveState() {
 }
 
 /* ---------- auth ---------- */
+/* the nickname someone picked on first login is their display name everywhere in
+   the app, for every role viewing them — falls back to their Google name, then
+   email, for the (should-be-brief) window before they've set one. */
+function nameOf(u) { return (u && (u.nickname || u.displayName || u.email)) || ''; }
+function myName() { return state.authUser ? (state.authUser.nickname || state.authUser.displayName || state.authUser.email) : ''; }
+
 async function resolveAccess(user) {
   const ek = emailKey(user.email);
   const isAdmin = ADMIN_EMAILS.includes(user.email);
-  await set(ref(db, `users/${user.uid}`), {
+  const existingSnap = await get(ref(db, `users/${user.uid}`));
+  const existing = existingSnap.val();
+  /* update(), not set() — a set() here would overwrite (lose) any nickname
+     already stored, since it's written separately once, on first login only. */
+  await update(ref(db, `users/${user.uid}`), {
     email: user.email, displayName: user.displayName || user.email, photoURL: user.photoURL || '', lastLoginAt: Date.now(),
   });
   const wlSnap = await get(ref(db, `whitelist/${ek}`));
   const wl = wlSnap.val();
   if (!wl && !isAdmin) { state.notAuthorized = true; state.booting = false; render(); return; }
 
+  if (existing && existing.nickname) {
+    state.authUser.nickname = existing.nickname;
+    await finishResolveAccess(user, wl, isAdmin);
+  } else {
+    state.needsNickname = true;
+    state.ui.nicknameDefault = user.displayName || user.email;
+    state.booting = false;
+    render();
+  }
+}
+async function finishResolveAccess(user, wl, isAdmin) {
   state.isAdmin = isAdmin;
   state.myBaseRole = wl ? wl.role : null;
   state.myTrainees = [];
@@ -314,25 +335,25 @@ async function resolveAccess(user) {
 
   if (state.myBaseRole === 'trainee') {
     state.role = 'client';
-    setViewingTrainee(user.uid, user.displayName || user.email);
+    setViewingTrainee(user.uid, myName());
     const tIdxSnap = await get(ref(db, `traineeIndex/${user.uid}`));
     const trainerUids = Object.keys(tIdxSnap.val() || {});
     if (trainerUids.length) {
       const tSnap = await get(ref(db, `users/${trainerUids[0]}`));
       const t = tSnap.val();
-      state.users.trainer = { id: trainerUids[0], name: t ? (t.displayName || t.email) : 'Trainer' };
+      state.users.trainer = { id: trainerUids[0], name: t ? nameOf(t) : 'Trainer' };
     } else {
       state.users.trainer = { id: null, name: 'No trainer assigned yet' };
     }
   } else if (state.myBaseRole === 'trainer') {
-    state.users.trainer = { id: user.uid, name: user.displayName || user.email };
+    state.users.trainer = { id: user.uid, name: myName() };
     const idxSnap = await get(ref(db, `trainerIndex/${user.uid}`));
     const traineeUids = Object.keys(idxSnap.val() || {});
     const trainees = [];
     for (const tUid of traineeUids) {
       const uSnap = await get(ref(db, `users/${tUid}`));
       const u = uSnap.val();
-      trainees.push({ uid: tUid, name: u ? (u.displayName || u.email) : tUid });
+      trainees.push({ uid: tUid, name: u ? nameOf(u) : tUid });
     }
     state.myTrainees = trainees;
     if (trainees.length) { state.role = 'trainer'; setViewingTrainee(trainees[0].uid, trainees[0].name); }
@@ -590,6 +611,15 @@ function renderNotAuthorizedScreen() {
     <button data-action="sign-out" class="h-11 px-5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md" type="button">Sign out</button>
   `);
 }
+function renderNicknameScreen() {
+  return renderCenteredScreen(`
+    <div class="w-16 h-16 rounded-2xl bg-primary text-on-primary flex items-center justify-center font-headline-lg text-headline-lg font-bold">N+1</div>
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">What should we call you?</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">This is the name your coach, trainees, and admins will see throughout the app.</p>
+    <input id="f-nickname" value="${esc(state.ui.nicknameDefault || '')}" placeholder="Your name" autofocus onkeydown="if(event.key==='Enter'){actions['submit-nickname']({})}" class="w-full max-w-xs h-12 px-4 rounded-full bg-surface-container-low border border-outline-variant/40 text-on-surface text-center font-title-md text-title-md">
+    <button data-action="submit-nickname" class="h-12 px-6 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('check','text-[20px]')}Continue</button>
+  `);
+}
 function renderNoRoleScreen() {
   return renderCenteredScreen(`
     <h1 class="font-headline-lg text-headline-lg text-on-surface">No role assigned yet</h1>
@@ -616,6 +646,7 @@ function renderInner() {
   if (!state.authUser) { $('#root').innerHTML = renderSignInScreen(); return; }
   if (state.booting) { $('#root').innerHTML = renderLoadingScreen(); return; }
   if (state.notAuthorized) { $('#root').innerHTML = renderNotAuthorizedScreen(); return; }
+  if (state.needsNickname) { $('#root').innerHTML = renderNicknameScreen(); return; }
   const { path, parts } = route();
   if (!state.viewingTraineeUid && path !== '/admin') { $('#root').innerHTML = renderNoRoleScreen(); return; }
 
@@ -688,7 +719,7 @@ function renderHeader(screenTitle) {
       </div>
       <div class="relative flex items-center gap-space-sm flex-shrink-0">
         <button aria-label="Profile menu" data-action="toggle-profile-menu" class="min-h-[48px] min-w-[48px] p-1 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors" type="button">
-          ${avatarDot(state.authUser.displayName || state.authUser.email, state.role==='trainer' ? 'bg-secondary' : 'bg-primary')}
+          ${avatarDot(myName(), state.role==='trainer' ? 'bg-secondary' : 'bg-primary')}
         </button>
         ${state.ui.profileMenuOpen ? renderProfileMenu() : ''}
       </div>
@@ -700,9 +731,9 @@ function renderProfileMenu() {
   return `
   <div class="absolute right-0 top-14 w-64 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/40 p-2 z-50">
     <div class="px-2 py-2 flex items-center gap-2.5">
-      ${avatarDot(state.authUser.displayName || state.authUser.email, 'bg-primary')}
+      ${avatarDot(myName(), 'bg-primary')}
       <span class="flex-1 min-w-0">
-        <span class="block font-label-md text-label-md font-semibold text-on-surface truncate">${esc(state.authUser.displayName || state.authUser.email)}</span>
+        <span class="block font-label-md text-label-md font-semibold text-on-surface truncate">${esc(myName())}</span>
         <span class="block font-label-sm text-label-sm text-on-surface-variant truncate">${esc(state.authUser.email)}</span>
       </span>
     </div>
@@ -1236,14 +1267,6 @@ function renderHomeTrainer() {
       ${icon('chevron_right','text-[20px] text-on-surface-variant')}
     </button>
   </section>` : ''}
-
-  <section class="flex flex-col gap-space-sm mt-space-lg">
-    <h3 class="font-headline-md text-headline-md text-on-surface px-1">Program</h3>
-    <div class="grid grid-cols-2 gap-2">
-      <a href="#/sequences" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-1 items-start">${icon('fitness_center','text-[22px] text-primary')}<span class="font-label-lg text-label-lg text-on-surface font-semibold">Sequences</span></a>
-      <a href="#/calendar" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-1 items-start">${icon('calendar_month','text-[22px] text-secondary')}<span class="font-label-lg text-label-lg text-on-surface font-semibold">Calendar</span></a>
-    </div>
-  </section>
   `;
 }
 
@@ -2195,9 +2218,13 @@ async function loadAdminCenterData() {
        signed-in user does write to themselves) by email instead. */
     const usersByEmail = {};
     Object.entries(usersSnap.val() || {}).forEach(([uid, u]) => {
-      if (u && u.email) usersByEmail[u.email.toLowerCase()] = uid;
+      if (u && u.email) usersByEmail[u.email.toLowerCase()] = { uid, nickname: u.nickname || null };
     });
-    wl.forEach(w => { w.uid = usersByEmail[(w.email||'').toLowerCase()] || null; });
+    wl.forEach(w => {
+      const u = usersByEmail[(w.email||'').toLowerCase()];
+      w.uid = u ? u.uid : null;
+      w.nickname = u ? u.nickname : null;
+    });
     const traineesByTrainer = {};
     for (const w of wl) {
       if (w.role === 'trainer' && w.uid) {
@@ -2205,7 +2232,7 @@ async function loadAdminCenterData() {
         const traineeUids = Object.keys(idxSnap.val() || {});
         traineesByTrainer[w.uid] = traineeUids.map(tUid => {
           const entry = wl.find(x => x.uid === tUid);
-          return { uid: tUid, name: entry ? entry.email : tUid };
+          return { uid: tUid, name: entry ? (entry.nickname || entry.email) : tUid };
         });
       }
     }
@@ -2248,12 +2275,12 @@ function adminUserRow(w) {
   <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
     <div class="flex items-center justify-between gap-2">
       <div class="min-w-0">
-        <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(w.email)}</h4>
-        <p class="font-label-sm text-label-sm text-on-surface-variant">${w.role==='trainer'?'Trainer':'Trainee'}${signedIn?'':' • hasn’t signed in yet'}</p>
+        <h4 class="font-title-md text-title-md text-on-surface truncate">${w.nickname ? esc(w.nickname) : esc(w.email)}</h4>
+        <p class="font-label-sm text-label-sm text-on-surface-variant truncate">${w.nickname ? esc(w.email)+' • ' : ''}${w.role==='trainer'?'Trainer':'Trainee'}${signedIn?'':' • hasn’t signed in yet'}</p>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
         ${w.role==='trainer' ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid||''}" data-trainer-email="${esc(w.email)}" ${signedIn?'':'disabled'} title="${signedIn?'':'Waiting for this trainer to sign in at least once'}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 disabled:opacity-40" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
-        ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
+        ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.nickname || w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
         <button data-action="open-admin-remove-user" data-email="${esc(w.email)}" data-uid="${w.uid||''}" data-role="${w.role}" aria-label="Remove ${esc(w.email)}" class="h-9 w-9 rounded-full flex items-center justify-center text-error hover:bg-error-container/40" type="button">${icon('person_remove','text-[18px]')}</button>
       </div>
     </div>
@@ -2283,7 +2310,7 @@ function modalAdminAssign(m) {
       ${trainees.length ? trainees.map(t => `
         <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-surface-container-low">
           <input type="checkbox" data-admin-trainee-uid="${t.uid}" ${current.has(t.uid)?'checked':''} class="w-5 h-5">
-          <span class="font-label-lg text-label-lg text-on-surface">${esc(t.email)}</span>
+          <span class="font-label-lg text-label-lg text-on-surface">${t.nickname ? esc(t.nickname) : esc(t.email)}</span>
         </label>`).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No trainees have signed in yet — ask them to sign in once, then come back here.</p>`}
     </div>
   `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
@@ -2332,6 +2359,21 @@ const actions = {
   },
   'sign-in': () => { signInWithPopup(fbAuth, googleProvider).catch(e => alert('Sign-in error: ' + e.message)); },
   'sign-out': () => { state.ui.profileMenuOpen = false; signOut(fbAuth); },
+  'submit-nickname': async () => {
+    const el = $('#f-nickname');
+    const nickname = (el ? el.value : '').trim();
+    if (!nickname) return;
+    const user = fbAuth.currentUser;
+    if (!user) return;
+    await update(ref(db, `users/${user.uid}`), { nickname });
+    state.authUser.nickname = nickname;
+    state.needsNickname = false;
+    state.booting = true; rerender();
+    const ek = emailKey(user.email);
+    const isAdmin = ADMIN_EMAILS.includes(user.email);
+    const wlSnap = await get(ref(db, `whitelist/${ek}`));
+    await finishResolveAccess(user, wlSnap.val(), isAdmin);
+  },
   'open-admin-add-user': () => { state.ui.modal = { type: 'admin-add-user' }; rerender(); },
   'admin-add-user-confirm': async () => {
     const email = ($('#f-admin-email').value || '').trim().toLowerCase();
