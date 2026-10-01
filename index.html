@@ -1,0 +1,2600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N+1 — Tandem Strength Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root{
+  --c-surface:247 249 255; --c-surface-dim:213 218 228; --c-surface-bright:247 249 255;
+  --c-surface-container-lowest:255 255 255; --c-surface-container-low:238 244 254;
+  --c-surface-container:233 238 248; --c-surface-container-high:227 232 242; --c-surface-container-highest:221 227 236;
+  --c-on-surface:22 28 35; --c-on-surface-variant:61 73 71;
+  --c-inverse-surface:43 49 56; --c-inverse-on-surface:236 241 251;
+  --c-outline:109 122 119; --c-outline-variant:188 201 198;
+  --c-surface-tint:0 106 97; --c-primary:0 104 95; --c-on-primary:255 255 255;
+  --c-primary-container:0 131 120; --c-on-primary-container:244 255 252; --c-inverse-primary:107 216 203;
+  --c-secondary:75 65 225; --c-on-secondary:255 255 255; --c-secondary-container:100 94 251; --c-on-secondary-container:255 251 255;
+  --c-tertiary:130 81 0; --c-on-tertiary:255 255 255; --c-tertiary-container:163 103 0; --c-on-tertiary-container:255 251 255;
+  --c-error:186 26 26; --c-on-error:255 255 255; --c-error-container:255 218 214; --c-on-error-container:147 0 10;
+  --c-primary-fixed:137 245 231; --c-primary-fixed-dim:107 216 203; --c-on-primary-fixed:0 32 29; --c-on-primary-fixed-variant:0 80 73;
+  --c-secondary-fixed:226 223 255; --c-secondary-fixed-dim:195 192 255; --c-on-secondary-fixed:15 0 105; --c-on-secondary-fixed-variant:51 35 204;
+  --c-tertiary-fixed:255 221 184; --c-tertiary-fixed-dim:255 185 95; --c-on-tertiary-fixed:42 23 0; --c-on-tertiary-fixed-variant:101 62 0;
+  --c-background:247 249 255; --c-on-background:22 28 35; --c-surface-variant:221 227 236;
+}
+html.dark{
+  --c-surface:15 20 25; --c-surface-dim:15 20 25; --c-surface-bright:53 61 68;
+  --c-surface-container-lowest:10 14 18; --c-surface-container-low:23 29 34;
+  --c-surface-container:27 34 39; --c-surface-container-high:38 46 52; --c-surface-container-highest:49 57 63;
+  --c-on-surface:227 232 242; --c-on-surface-variant:188 201 198;
+  --c-inverse-surface:227 232 242; --c-inverse-on-surface:43 49 56;
+  --c-outline:135 147 144; --c-outline-variant:61 73 71;
+  --c-surface-tint:107 216 203; --c-primary:107 216 203; --c-on-primary:0 56 47;
+  --c-primary-container:0 80 73; --c-on-primary-container:137 245 231; --c-inverse-primary:0 104 95;
+  --c-secondary:195 192 255; --c-on-secondary:31 0 146; --c-secondary-container:51 35 204; --c-on-secondary-container:226 223 255;
+  --c-tertiary:255 185 95; --c-on-tertiary:68 43 0; --c-tertiary-container:101 62 0; --c-on-tertiary-container:255 221 184;
+  --c-error:255 180 171; --c-on-error:105 0 5; --c-error-container:147 0 10; --c-on-error-container:255 218 214;
+  --c-background:15 20 25; --c-on-background:227 232 242; --c-surface-variant:61 73 71;
+}
+*{ -webkit-tap-highlight-color: transparent; }
+html,body{ margin:0; padding:0; }
+body{ overscroll-behavior:none; font-variant-numeric: tabular-nums; }
+::-webkit-scrollbar{ display:none; }
+*{ scrollbar-width:none; }
+.pb-safe{ padding-bottom: env(safe-area-inset-bottom,0px); }
+.pt-safe{ padding-top: env(safe-area-inset-top,0px); }
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+input[type=number]{ -moz-appearance: textfield; }
+</style>
+<script id="tw-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: { extend: {
+    colors: {
+      "on-background":"rgb(var(--c-on-background) / <alpha-value>)",
+      "primary":"rgb(var(--c-primary) / <alpha-value>)",
+      "on-secondary-fixed":"rgb(var(--c-on-secondary-fixed) / <alpha-value>)",
+      "surface-container-lowest":"rgb(var(--c-surface-container-lowest) / <alpha-value>)",
+      "on-tertiary-container":"rgb(var(--c-on-tertiary-container) / <alpha-value>)",
+      "primary-fixed":"rgb(var(--c-primary-fixed) / <alpha-value>)",
+      "on-primary-fixed":"rgb(var(--c-on-primary-fixed) / <alpha-value>)",
+      "surface-container-low":"rgb(var(--c-surface-container-low) / <alpha-value>)",
+      "secondary-container":"rgb(var(--c-secondary-container) / <alpha-value>)",
+      "on-tertiary":"rgb(var(--c-on-tertiary) / <alpha-value>)",
+      "on-error-container":"rgb(var(--c-on-error-container) / <alpha-value>)",
+      "on-secondary-container":"rgb(var(--c-on-secondary-container) / <alpha-value>)",
+      "tertiary-fixed":"rgb(var(--c-tertiary-fixed) / <alpha-value>)",
+      "primary-container":"rgb(var(--c-primary-container) / <alpha-value>)",
+      "surface-container-high":"rgb(var(--c-surface-container-high) / <alpha-value>)",
+      "background":"rgb(var(--c-background) / <alpha-value>)",
+      "surface-container":"rgb(var(--c-surface-container) / <alpha-value>)",
+      "tertiary":"rgb(var(--c-tertiary) / <alpha-value>)",
+      "on-tertiary-fixed":"rgb(var(--c-on-tertiary-fixed) / <alpha-value>)",
+      "on-tertiary-fixed-variant":"rgb(var(--c-on-tertiary-fixed-variant) / <alpha-value>)",
+      "secondary-fixed-dim":"rgb(var(--c-secondary-fixed-dim) / <alpha-value>)",
+      "surface-tint":"rgb(var(--c-surface-tint) / <alpha-value>)",
+      "inverse-on-surface":"rgb(var(--c-inverse-on-surface) / <alpha-value>)",
+      "on-surface":"rgb(var(--c-on-surface) / <alpha-value>)",
+      "secondary-fixed":"rgb(var(--c-secondary-fixed) / <alpha-value>)",
+      "outline-variant":"rgb(var(--c-outline-variant) / <alpha-value>)",
+      "on-primary-container":"rgb(var(--c-on-primary-container) / <alpha-value>)",
+      "primary-fixed-dim":"rgb(var(--c-primary-fixed-dim) / <alpha-value>)",
+      "surface-variant":"rgb(var(--c-surface-variant) / <alpha-value>)",
+      "error-container":"rgb(var(--c-error-container) / <alpha-value>)",
+      "on-secondary":"rgb(var(--c-on-secondary) / <alpha-value>)",
+      "error":"rgb(var(--c-error) / <alpha-value>)",
+      "tertiary-container":"rgb(var(--c-tertiary-container) / <alpha-value>)",
+      "on-primary":"rgb(var(--c-on-primary) / <alpha-value>)",
+      "inverse-surface":"rgb(var(--c-inverse-surface) / <alpha-value>)",
+      "secondary":"rgb(var(--c-secondary) / <alpha-value>)",
+      "surface":"rgb(var(--c-surface) / <alpha-value>)",
+      "on-secondary-fixed-variant":"rgb(var(--c-on-secondary-fixed-variant) / <alpha-value>)",
+      "on-primary-fixed-variant":"rgb(var(--c-on-primary-fixed-variant) / <alpha-value>)",
+      "on-surface-variant":"rgb(var(--c-on-surface-variant) / <alpha-value>)",
+      "on-error":"rgb(var(--c-on-error) / <alpha-value>)",
+      "surface-bright":"rgb(var(--c-surface-bright) / <alpha-value>)",
+      "surface-dim":"rgb(var(--c-surface-dim) / <alpha-value>)",
+      "inverse-primary":"rgb(var(--c-inverse-primary) / <alpha-value>)",
+      "outline":"rgb(var(--c-outline) / <alpha-value>)",
+      "surface-container-highest":"rgb(var(--c-surface-container-highest) / <alpha-value>)",
+      "tertiary-fixed-dim":"rgb(var(--c-tertiary-fixed-dim) / <alpha-value>)"
+    },
+    borderRadius: { "DEFAULT":"0.5rem", "sm":"0.25rem", "md":"0.75rem", "lg":"1rem", "xl":"1.5rem", "full":"9999px" },
+    spacing: { "space-xs":"0.25rem","space-sm":"0.5rem","space-md":"1rem","space-lg":"1.5rem","space-xl":"2rem","gutter":"1rem","gutter-desktop":"1.5rem","margin":"1rem","margin-tablet":"1.5rem","margin-desktop":"2.5rem" },
+    fontFamily: { "sans":["Plus Jakarta Sans","system-ui","sans-serif"] },
+    fontSize: {
+      "headline-xl":["36px",{lineHeight:"44px",letterSpacing:"-0.02em",fontWeight:"700"}],
+      "headline-xl-mobile":["28px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"700"}],
+      "headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"700"}],
+      "headline-md":["20px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"600"}],
+      "title-md":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"600"}],
+      "body-lg":["16px",{lineHeight:"26px",fontWeight:"400"}],
+      "body-md":["14px",{lineHeight:"22px",fontWeight:"400"}],
+      "label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"600"}],
+      "label-md":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"500"}],
+      "label-sm":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],
+      "numeric-metric":["22px",{lineHeight:"28px",letterSpacing:"-0.02em",fontWeight:"700"}],
+      "numeric-metric-lg":["32px",{lineHeight:"38px",letterSpacing:"-0.03em",fontWeight:"800"}]
+    }
+  }}
+};
+</script>
+</head>
+<body class="bg-surface font-sans text-body-md text-on-surface">
+<div id="root"></div>
+<script type="module">
+/* ===================== N+1 — Tandem Strength ===================== */
+'use strict';
+
+/* ---------- Firebase ---------- */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getDatabase, ref, set, update, get, onValue, off }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBts79Ln9i1QytGYZaznOVJMhUcj2GrHkg",
+  authDomain: "n-plus1.firebaseapp.com",
+  databaseURL: "https://n-plus1-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "n-plus1",
+  storageBucket: "n-plus1.firebasestorage.app",
+  messagingSenderId: "1018311523936",
+  appId: "1:1018311523936:web:0caac2df9ee0de41f00d05"
+};
+const fbApp = initializeApp(firebaseConfig);
+const fbAuth = getAuth(fbApp);
+const db = getDatabase(fbApp);
+const googleProvider = new GoogleAuthProvider();
+const ADMIN_EMAILS = ['nurnasuhaa@gmail.com', 'shaf.r210003@gmail.com'];
+function emailKey(email) { return (email || '').toLowerCase().trim().replace(/\./g, ','); }
+function arrayToObj(arr) { const o = {}; (arr || []).forEach(item => { if (item && item.id) o[item.id] = item; }); return o; }
+
+/* ---------- tiny utils ---------- */
+let _uid = 1;
+const uid = (p) => `${p}_${Date.now().toString(36)}_${(_uid++).toString(36)}`;
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const round1 = (n) => Math.round(n * 10) / 10;
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addDays = (base, n) => { const d = new Date(base + 'T00:00:00'); d.setDate(d.getDate() + n); return iso(d); };
+const todayISO = () => iso(new Date());
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function fmtShort(dateStr) { const d = new Date(dateStr + 'T00:00:00'); return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`; }
+function fmtFull(dateStr) { const d = new Date(dateStr + 'T00:00:00'); const wd=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; return `${wd[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`; }
+function monthKey(dateStr) { return dateStr.slice(0,7); }
+function monthLabel(key) { const [y,m] = key.split('-').map(Number); return `${MONTHS[m-1].slice(0,3)} ${y}`; }
+function fmtDuration(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec/60), s = sec%60; return `${m}:${String(s).padStart(2,'0')}`; }
+function fmtMinutes(sec) { return `${Math.round(sec/60)} min`; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function getPath(obj, path) { return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), obj); }
+function setPath(obj, path, value) { const keys = path.split('.'); let o = obj; for (let i=0;i<keys.length-1;i++) o = o[keys[i]]; o[keys[keys.length-1]] = value; }
+function $(sel, root=document){ return root.querySelector(sel); }
+function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+
+const CATEGORIES = ['Chest','Back','Shoulders','Legs','Arms','Core'];
+
+/* ---------- state ---------- */
+function freshUiState() {
+  let theme = 'light';
+  try { theme = localStorage.getItem('n1_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch(e) {}
+  return {
+    calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
+    historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null,
+    libSearch:'', libCategory:'all', modal:null, expandedSeqExIdx:null, expandedHistorySessionId:null,
+    inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false,
+    adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
+    theme,
+  };
+}
+let state = {
+  booting: true,
+  authUser: null,
+  isAdmin: false,
+  notAuthorized: false,
+  myBaseRole: null,
+  myTrainees: [],
+  viewingTraineeUid: null,
+  role: 'client',
+  users: { trainer: { id:null, name:'' }, client: { id:null, name:'' } },
+  exercises: [], sequences: [], scheduledSessions: [], workoutSessions: [],
+  activeSession: null,
+  ui: freshUiState(),
+};
+
+/* ---------- persistence (Firebase-backed) ---------- */
+let dataListeners = [];
+function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; }
+function attachDataListeners(traineeUid) {
+  detachDataListeners();
+  ['exercises','sequences','scheduledSessions','workoutSessions'].forEach(key => {
+    const r = ref(db, `userData/${traineeUid}/${key}`);
+    const cb = onValue(r, snap => { state[key] = Object.values(snap.val() || {}); if (!state.booting) render(); });
+    dataListeners.push({ ref:r, cb });
+  });
+  try {
+    const raw = localStorage.getItem(`n1_active_${traineeUid}`);
+    state.activeSession = raw ? JSON.parse(raw) : null;
+  } catch(e) { state.activeSession = null; }
+}
+function setViewingTrainee(traineeUid, traineeName) {
+  state.viewingTraineeUid = traineeUid;
+  state.users.client = { id: traineeUid, name: traineeName || '' };
+  attachDataListeners(traineeUid);
+}
+let fbSyncTimer = null;
+function syncToFirebase() {
+  if (!state.viewingTraineeUid) return;
+  clearTimeout(fbSyncTimer);
+  fbSyncTimer = setTimeout(() => {
+    update(ref(db, `userData/${state.viewingTraineeUid}`), {
+      exercises: arrayToObj(state.exercises),
+      sequences: arrayToObj(state.sequences),
+      scheduledSessions: arrayToObj(state.scheduledSessions),
+      workoutSessions: arrayToObj(state.workoutSessions),
+    }).catch(e => console.error('Firebase sync failed', e));
+  }, 500);
+}
+function saveState() {
+  if (state.viewingTraineeUid) {
+    try {
+      if (state.activeSession) localStorage.setItem(`n1_active_${state.viewingTraineeUid}`, JSON.stringify(state.activeSession));
+      else localStorage.removeItem(`n1_active_${state.viewingTraineeUid}`);
+    } catch(e) {}
+  }
+  syncToFirebase();
+}
+
+/* ---------- auth ---------- */
+async function resolveAccess(user) {
+  const ek = emailKey(user.email);
+  const isAdmin = ADMIN_EMAILS.includes(user.email);
+  await set(ref(db, `users/${user.uid}`), {
+    email: user.email, displayName: user.displayName || user.email, photoURL: user.photoURL || '', lastLoginAt: Date.now(),
+  });
+  const wlSnap = await get(ref(db, `whitelist/${ek}`));
+  const wl = wlSnap.val();
+  if (wl && !wl.uid) { try { await update(ref(db, `whitelist/${ek}`), { uid: user.uid }); } catch(e) {} }
+  if (!wl && !isAdmin) { state.notAuthorized = true; state.booting = false; render(); return; }
+
+  state.isAdmin = isAdmin;
+  state.myBaseRole = wl ? wl.role : null;
+  state.myTrainees = [];
+  state.users.trainer = { id:null, name:'' };
+  state.users.client = { id:null, name:'' };
+  state.viewingTraineeUid = null;
+
+  if (state.myBaseRole === 'trainee') {
+    state.role = 'client';
+    setViewingTrainee(user.uid, user.displayName || user.email);
+    const tIdxSnap = await get(ref(db, `traineeIndex/${user.uid}`));
+    const trainerUids = Object.keys(tIdxSnap.val() || {});
+    if (trainerUids.length) {
+      const tSnap = await get(ref(db, `users/${trainerUids[0]}`));
+      const t = tSnap.val();
+      state.users.trainer = { id: trainerUids[0], name: t ? (t.displayName || t.email) : 'Trainer' };
+    } else {
+      state.users.trainer = { id: null, name: 'No trainer assigned yet' };
+    }
+  } else if (state.myBaseRole === 'trainer') {
+    state.users.trainer = { id: user.uid, name: user.displayName || user.email };
+    const idxSnap = await get(ref(db, `trainerIndex/${user.uid}`));
+    const traineeUids = Object.keys(idxSnap.val() || {});
+    const trainees = [];
+    for (const tUid of traineeUids) {
+      const uSnap = await get(ref(db, `users/${tUid}`));
+      const u = uSnap.val();
+      trainees.push({ uid: tUid, name: u ? (u.displayName || u.email) : tUid });
+    }
+    state.myTrainees = trainees;
+    if (trainees.length) { state.role = 'trainer'; setViewingTrainee(trainees[0].uid, trainees[0].name); }
+  }
+
+  state.booting = false;
+  render();
+}
+
+onAuthStateChanged(fbAuth, (user) => {
+  detachDataListeners();
+  if (!user) {
+    state.authUser = null; state.booting = false; state.notAuthorized = false;
+    state.isAdmin = false; state.myBaseRole = null; state.myTrainees = [];
+    state.viewingTraineeUid = null; state.exercises = []; state.sequences = [];
+    state.scheduledSessions = []; state.workoutSessions = []; state.activeSession = null;
+    state.users = { trainer: { id:null, name:'' }, client: { id:null, name:'' } };
+    render();
+    return;
+  }
+  state.authUser = { uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL };
+  state.booting = true; state.notAuthorized = false;
+  render();
+  resolveAccess(user);
+});
+
+/* ---------- domain helpers ---------- */
+function getExercise(id) { return state.exercises.find(e => e.id === id); }
+function getSequence(id) { return state.sequences.find(s => s.id === id); }
+function sequenceNameTaken(name, excludeId) {
+  const n = name.trim().toLowerCase();
+  return state.sequences.some(s => s.id !== excludeId && s.name.trim().toLowerCase() === n);
+}
+function otherRole() { return state.role === 'client' ? 'trainer' : 'client'; }
+function currentUser() { return state.users[state.role]; }
+function otherUser() { return state.users[otherRole()]; }
+function roleName(r) { return state.users[r].name; }
+
+function upcomingScheduled() {
+  return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
+}
+function completedSessionsSorted() {
+  return [...state.workoutSessions].sort((a,b)=> b.date.localeCompare(a.date));
+}
+function sessionsAwaitingReview() {
+  return completedSessionsSorted().filter(s => !s.reviewedByTrainer);
+}
+/* top (first) working set of an exercise block, ignoring warmups */
+function topWorkingSet(exBlock) {
+  if (!exBlock) return null;
+  return exBlock.sets.find(s => s.type === 'working') || exBlock.sets[0] || null;
+}
+function repsOf(set) {
+  if (!set) return null;
+  if (set.repsLeft != null || set.repsRight != null) return ((set.repsLeft||0) + (set.repsRight||0)) / 2;
+  return set.reps;
+}
+function weightOf(set) {
+  if (!set) return null;
+  if (set.weightLeft != null || set.weightRight != null) return ((set.weightLeft||0) + (set.weightRight||0)) / 2;
+  return set.weight;
+}
+function intensityNum(set, side='') {
+  const val = set ? set['intensityValue'+side] : null;
+  if (val == null) return null;
+  if (val === 'failure') return 11;
+  if (set['intensityMethod'+side] === 'rir') return 10 - Number(val);
+  return Number(val);
+}
+/* most recent completed session (before given date, excluding a session id) containing exerciseId */
+function findPreviousExerciseBlock(exerciseId, beforeDate, excludeSessionId) {
+  const sessions = completedSessionsSorted().filter(s => s.id !== excludeSessionId && s.date < beforeDate);
+  for (const s of sessions) {
+    const block = s.exercises.find(e => e.exerciseId === exerciseId);
+    if (block) return { session: s, block };
+  }
+  return null;
+}
+function hasSetData(set) {
+  return !!set && (set.weight != null || set.reps != null || set.repsLeft != null || set.repsRight != null || set.weightLeft != null || set.weightRight != null);
+}
+/* a set someone started logging (has weight or reps) but didn't finish — missing weight, reps, or RPE on either side */
+function setIsIncomplete(set, isUni) {
+  if (!hasSetData(set)) return false;
+  if (isUni) return set.weightLeft == null || set.weightRight == null || set.repsLeft == null || set.repsRight == null || set.intensityValueLeft == null || set.intensityValueRight == null;
+  return set.weight == null || set.reps == null || set.intensityValue == null;
+}
+function sessionIncompleteSets(s) {
+  const items = [];
+  s.exercises.forEach(ex => {
+    const isUni = ex.laterality === 'unilateral';
+    ex.sets.forEach((set, setIdx) => {
+      if (setIsIncomplete(set, isUni)) items.push({ exName: ex.nameSnapshot, label: `Set ${setIdx+1}` });
+      (set.drops||[]).forEach((d, di) => { if (setIsIncomplete(d, isUni)) items.push({ exName: ex.nameSnapshot, label: `Set ${setIdx+1} · Drop ${di+1}` }); });
+    });
+  });
+  return items;
+}
+function compareTopSet(prevSet, currSet) {
+  if (!prevSet || !currSet || !hasSetData(currSet)) return null;
+  const pr = repsOf(prevSet), cr = repsOf(currSet);
+  const pw = weightOf(prevSet), cw = weightOf(currSet);
+  if (pr == null || cr == null || cw == null || pw == null) return null;
+  if (cw > pw && cr >= pr) return { type:'weight', text:`+${round1(cw-pw)}kg at ${cr>pr?'more':'the same'} reps` };
+  if (cw === pw && cr > pr) return { type:'reps', text:`+${round1(cr-pr)} reps at the same weight` };
+  if (cw === pw && cr === pr) {
+    const pi = intensityNum(prevSet), ci = intensityNum(currSet);
+    if (pi != null && ci != null && ci < pi) return { type:'intensity', text:'Same performance at a lower RPE' };
+  }
+  return null;
+}
+/* like compareTopSet, but reports every direction (up/flat/down) instead of only improvements —
+   used where the trainer needs the honest picture, not just a highlight reel */
+function compareTopSetFull(prevSet, currSet) {
+  if (!prevSet || !currSet || !hasSetData(currSet)) return null;
+  const pr = repsOf(prevSet), cr = repsOf(currSet);
+  const pw = weightOf(prevSet), cw = weightOf(currSet);
+  if (pr == null || cr == null || cw == null || pw == null) return null;
+  const dw = round1(cw - pw), dr = round1(cr - pr);
+  if (dw > 0 && dr >= 0) return { dir:'up', text:`+${dw}kg at ${dr>0?'more':'the same'} reps` };
+  if (dw === 0 && dr > 0) return { dir:'up', text:`+${dr} reps at the same weight` };
+  if (dw === 0 && dr === 0) {
+    const pi = intensityNum(prevSet), ci = intensityNum(currSet);
+    if (pi != null && ci != null && ci < pi) return { dir:'up', text:'Same weight & reps at a lower RPE' };
+    if (pi != null && ci != null && ci > pi) return { dir:'down', text:'Same weight & reps at a higher RPE' };
+    return { dir:'flat', text:'Matched last time — same weight & reps' };
+  }
+  if (dw < 0 && dr <= 0) return { dir:'down', text:`${dw}kg at ${dr<0?'fewer':'the same'} reps` };
+  if (dw === 0 && dr < 0) return { dir:'down', text:`${dr} reps at the same weight` };
+  return { dir:'flat', text:`${dw>0?'+':''}${dw}kg, ${dr>0?'+':''}${dr} reps vs last time` };
+}
+function isPR(exerciseId, set, beforeDate) {
+  const w = weightOf(set);
+  if (!set || !hasSetData(set) || w == null) return false;
+  const r = repsOf(set);
+  const past = state.workoutSessions.filter(s => s.date < beforeDate);
+  let maxW = -1, repsAtMax = -1;
+  for (const s of past) {
+    const block = s.exercises.find(e => e.exerciseId === exerciseId);
+    if (!block) continue;
+    for (const st of [...block.sets, ...block.sets.flatMap(x=>x.drops||[])]) {
+      if (!hasSetData(st)) continue;
+      const stW = weightOf(st);
+      if (stW == null) continue;
+      const sr = repsOf(st);
+      if (stW > maxW || (stW === maxW && sr > repsAtMax)) { maxW = stW; repsAtMax = sr; }
+    }
+  }
+  if (maxW < 0) return false;
+  return (w > maxW) || (w === maxW && r > repsAtMax);
+}
+function sessionStats(session) {
+  let workingSets=0, dropSets=0, totalReps=0, volume=0, exercisesDone=0;
+  for (const ex of session.exercises) {
+    let any=false;
+    const allSets = session_flatSets(ex);
+    for (const {set,isDrop} of allSets) {
+      if (!hasSetData(set)) continue;
+      any = true;
+      if (isDrop) dropSets++; else if (set.type==='working') workingSets++;
+      const mult = ex.loadType === 'per_side' ? 2 : 1;
+      if (set.weightLeft != null || set.weightRight != null || set.repsLeft != null || set.repsRight != null) {
+        const rl = set.repsLeft || 0, rr = set.repsRight || 0;
+        totalReps += rl + rr;
+        volume += (set.weightLeft || 0) * mult * rl + (set.weightRight || 0) * mult * rr;
+      } else {
+        const r = set.reps || 0;
+        totalReps += r;
+        if (set.weight) volume += set.weight * mult * r;
+      }
+    }
+    if (any) exercisesDone++;
+  }
+  return { workingSets, dropSets, totalReps, volume: Math.round(volume), exercisesDone, exercisesTotal: session.exercises.length };
+}
+function session_flatSets(ex) {
+  const out = [];
+  for (const s of ex.sets) { out.push({set:s, isDrop:false}); for (const d of (s.drops||[])) out.push({set:d, isDrop:true}); }
+  return out;
+}
+
+/* ---------- icons ---------- */
+function icon(name, cls='text-[20px]') { return `<span class="material-symbols-outlined ${cls}">${name}</span>`; }
+
+/* ---------- generic bits ---------- */
+function pill(text, cls) { return `<span class="px-2.5 py-1 rounded-full font-label-sm text-label-sm ${cls}">${text}</span>`; }
+function avatarDot(name, bg) { return `<span class="w-8 h-8 rounded-full ${bg} text-white flex items-center justify-center font-label-md text-label-md font-bold">${esc(name[0])}</span>`; }
+
+function intensityLabel(set, side='') {
+  if (!set) return '';
+  const val = set['intensityValue'+side];
+  if (val === 'failure' || val == null) return val==='failure' ? 'Failure' : '';
+  if (set['intensityMethod'+side] === 'rir') return `RIR ${val}`;
+  return `RPE ${val}`;
+}
+/* compact "RPE L8/R9" style label for a unilateral set's independently-tracked left/right intensity */
+function intensityLabelSides(set) {
+  const l = set.intensityValueLeft, r = set.intensityValueRight;
+  if (l == null && r == null) return '';
+  const method = set.intensityMethodLeft || set.intensityMethodRight || 'rpe';
+  const fmt = (v) => v == null ? '–' : (v === 'failure' ? 'F' : v);
+  return `${method === 'rir' ? 'RIR' : 'RPE'} L${fmt(l)}/R${fmt(r)}`;
+}
+
+/* ================= ROUTER ================= */
+function route() {
+  const h = location.hash.replace(/^#/, '') || '/home';
+  const parts = h.split('/').filter(Boolean);
+  return { path: '/' + (parts[0]||'home'), parts };
+}
+function navigate(h) { location.hash = h; }
+/* a draft sequence being actively edited, with at least one exercise — navigating away from
+   this should be an intentional save-draft/discard choice, not a silent auto-save */
+function draftNavGuardSequence() {
+  const r = route();
+  if (r.parts[0] !== 'sequences' || !r.parts[1]) return null;
+  const seq = getSequence(r.parts[1]);
+  if (!seq || !seq.draft || seq.exercises.length === 0) return null;
+  return seq;
+}
+/* an empty draft (no exercises) has nothing worth saving — leaving it should quietly
+   discard the shell instead of letting it sit around as a saved "empty sequence" */
+function emptyDraftOnCurrentPage() {
+  const r = route();
+  if (r.parts[0] !== 'sequences' || !r.parts[1]) return null;
+  const seq = getSequence(r.parts[1]);
+  if (!seq || !seq.draft || seq.exercises.length > 0) return null;
+  return seq;
+}
+window.addEventListener('hashchange', render);
+window.addEventListener('DOMContentLoaded', () => { applyTheme(); render(); });
+window.addEventListener('beforeunload', (e) => { if (state.activeSession) { e.preventDefault(); e.returnValue = ''; } });
+
+function applyTheme() { document.documentElement.classList.toggle('dark', state.ui.theme === 'dark'); }
+
+/* ================= AUTH SCREENS ================= */
+function renderCenteredScreen(innerHtml) {
+  return `<div class="min-h-screen flex flex-col items-center justify-center bg-surface text-on-surface px-margin text-center gap-4">${innerHtml}</div>`;
+}
+function renderSignInScreen() {
+  return renderCenteredScreen(`
+    <div class="w-16 h-16 rounded-2xl bg-primary text-on-primary flex items-center justify-center font-headline-lg text-headline-lg font-bold">N+1</div>
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">Welcome to N+1</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">Sign in with the Google account your coach or admin whitelisted.</p>
+    <button data-action="sign-in" class="h-12 px-6 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('login','text-[20px]')}Sign in with Google</button>
+  `);
+}
+function renderLoadingScreen() {
+  return renderCenteredScreen(`<p class="font-body-md text-body-md text-on-surface-variant">Loading…</p>`);
+}
+function renderNotAuthorizedScreen() {
+  return renderCenteredScreen(`
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">Not authorized</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">This account isn't whitelisted yet. Ask your admin to add ${esc(state.authUser ? state.authUser.email : 'your email')}.</p>
+    <button data-action="sign-out" class="h-11 px-5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md" type="button">Sign out</button>
+  `);
+}
+function renderNoRoleScreen() {
+  return renderCenteredScreen(`
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">No role assigned yet</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">${state.myBaseRole === 'trainer' ? "You're whitelisted as a trainer, but have no trainees assigned yet." : state.isAdmin ? "You're an admin with no trainer/trainee role of your own." : "Ask your admin to whitelist and assign you."}</p>
+    ${state.isAdmin ? `<button data-action="go" data-href="#/admin" class="h-11 px-5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg" type="button">Open Admin Center</button>` : ''}
+    <button data-action="sign-out" class="h-10 px-4 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md" type="button">Sign out</button>
+  `);
+}
+
+/* ================= RENDER SHELL ================= */
+function render() {
+  applyTheme();
+  if (!state.authUser) { $('#root').innerHTML = renderSignInScreen(); return; }
+  if (state.booting) { $('#root').innerHTML = renderLoadingScreen(); return; }
+  if (state.notAuthorized) { $('#root').innerHTML = renderNotAuthorizedScreen(); return; }
+  const { path, parts } = route();
+  if (!state.viewingTraineeUid && path !== '/admin') { $('#root').innerHTML = renderNoRoleScreen(); return; }
+
+  let body = '';
+  let navKey = 'home';
+  if (path === '/home') { body = renderHome(); navKey='home'; }
+  else if (path === '/calendar') { body = renderCalendar(); navKey='calendar'; }
+  else if (path === '/sequences') {
+    if (parts[1]) { body = renderSequenceDetail(parts[1]); } else { body = renderSequencesList(); }
+    navKey='sequences';
+  }
+  else if (path === '/library') { body = renderLibrary(); navKey='sequences'; }
+  else if (path === '/history') {
+    if (parts[1] === 'session' && parts[2]) body = renderSessionDetail(parts[2], false);
+    else if (parts[1] === 'exercise' && parts[2]) body = renderExerciseHistory(parts[2]);
+    else body = renderHistory();
+    navKey='history';
+  }
+  else if (path === '/workout') { body = renderActiveWorkout(); navKey='workout'; }
+  else if (path === '/summary') { body = renderSessionDetail(parts[1], true); navKey='workout'; }
+  else if (path === '/admin') {
+    body = renderAdminCenter(); navKey='admin';
+    if (state.isAdmin && !state.ui.adminLoaded && !state.ui.adminLoadError) loadAdminCenterData();
+  }
+  else { body = renderHome(); }
+
+  const screenTitle = {home:'Home',calendar:'Calendar',sequences:'Sequences',history:'History',workout:'Workout',admin:'Admin Center'}[navKey] || 'Home';
+  const showHeader = navKey === 'home';
+  const html = `
+    ${showHeader ? renderHeader(screenTitle) : ''}
+    <main class="flex-1 w-full ${showHeader ? 'pt-16' : ''} ${navKey==='workout' ? 'pb-28':'pb-24'} bg-surface px-margin max-w-xl mx-auto">
+      ${state.activeSession && navKey !== 'workout' ? renderResumeBar() : ''}
+      <div class="pb-8">${body}</div>
+    </main>
+    ${renderBottomNav(navKey)}
+    ${renderModal()}
+  `;
+  $('#root').innerHTML = `<div class="min-h-screen flex flex-col bg-surface text-on-surface">${html}</div>`;
+}
+
+function renderResumeBar() {
+  const s = state.activeSession;
+  const elapsed = Math.floor((Date.now() - s.startedAt) / 1000);
+  return `<button data-action="go" data-href="#/workout" class="w-full mt-3 mb-1 flex items-center justify-between gap-2 bg-primary-fixed/50 text-on-primary-fixed-variant rounded-xl px-3.5 py-2.5 shadow-sm">
+    <span class="flex items-center gap-2 font-label-md text-label-md font-semibold">
+      <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+      Workout in progress • ${fmtDuration(elapsed)} elapsed
+    </span>
+    <span class="font-label-sm text-label-sm font-bold text-primary">Resume</span>
+  </button>`;
+}
+
+function renderHeader(screenTitle) {
+  const connectedName = state.role === 'client' ? state.users.trainer.name : state.users.client.name;
+  return `
+  <header class="fixed top-0 w-full z-50 pt-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <div class="h-16 px-margin flex items-center justify-between gap-space-sm max-w-xl mx-auto">
+      <div class="flex items-center gap-space-sm min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0">N+1</div>
+        <div class="flex flex-col min-w-0">
+          <span class="font-title-md text-title-md text-on-surface truncate">${esc(screenTitle)}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            </span>
+            <span class="font-label-sm text-label-sm text-on-surface-variant truncate">${esc(connectedName)} • Connected</span>
+          </div>
+        </div>
+      </div>
+      <div class="relative flex items-center gap-space-sm flex-shrink-0">
+        <button aria-label="Profile menu" data-action="toggle-profile-menu" class="min-h-[48px] min-w-[48px] p-1 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors" type="button">
+          ${avatarDot(state.authUser.displayName || state.authUser.email, state.role==='trainer' ? 'bg-secondary' : 'bg-primary')}
+        </button>
+        ${state.ui.profileMenuOpen ? renderProfileMenu() : ''}
+      </div>
+    </div>
+  </header>`;
+}
+
+function renderProfileMenu() {
+  return `
+  <div class="absolute right-0 top-14 w-64 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/40 p-2 z-50">
+    <div class="px-2 py-2 flex items-center gap-2.5">
+      ${avatarDot(state.authUser.displayName || state.authUser.email, 'bg-primary')}
+      <span class="flex-1 min-w-0">
+        <span class="block font-label-md text-label-md font-semibold text-on-surface truncate">${esc(state.authUser.displayName || state.authUser.email)}</span>
+        <span class="block font-label-sm text-label-sm text-on-surface-variant truncate">${esc(state.authUser.email)}</span>
+      </span>
+    </div>
+    ${state.myBaseRole === 'trainer' && state.myTrainees.length > 1 ? `
+    <div class="h-px bg-outline-variant/40 my-1.5"></div>
+    <div class="px-2 py-1.5 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Coaching</div>
+    ${state.myTrainees.map(t => `
+      <button data-action="switch-trainee" data-uid="${t.uid}" data-name="${esc(t.name)}" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container ${state.viewingTraineeUid===t.uid?'bg-surface-container-low':''} text-left" type="button">
+        ${avatarDot(t.name, 'bg-primary')}
+        <span class="flex-1 font-label-md text-label-md font-semibold text-on-surface truncate">${esc(t.name)}</span>
+        ${state.viewingTraineeUid===t.uid ? icon('check','text-[18px] text-primary') : ''}
+      </button>`).join('')}
+    ` : ''}
+    <div class="h-px bg-outline-variant/40 my-1.5"></div>
+    <button data-action="toggle-theme" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">
+      ${icon(state.ui.theme==='dark'?'light_mode':'dark_mode','text-[18px] text-on-surface-variant')}
+      <span class="font-label-md text-label-md text-on-surface">${state.ui.theme==='dark'?'Light mode':'Dark mode'}</span>
+    </button>
+    ${state.isAdmin ? `
+    <button data-action="go" data-href="#/admin" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">
+      ${icon('admin_panel_settings','text-[18px] text-on-surface-variant')}
+      <span class="font-label-md text-label-md text-on-surface">Admin Center</span>
+    </button>` : ''}
+    <button data-action="sign-out" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">
+      ${icon('logout','text-[18px] text-error')}
+      <span class="font-label-md text-label-md text-error">Sign out</span>
+    </button>
+  </div>`;
+}
+
+function renderBottomNav(active) {
+  const items = [
+    {key:'home', href:'#/home', icon:'home', label:'Home'},
+    {key:'sequences', href:'#/sequences', icon:'fitness_center', label:'Sequences'},
+    {key:'calendar', href:'#/calendar', icon:'calendar_today', label:'Calendar'},
+    {key:'history', href:'#/history', icon:'history', label:'History'},
+  ];
+  return `
+  <nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl shadow-[0_-4px_16px_rgba(18,22,26,0.05)]">
+    <div class="max-w-xl mx-auto h-16 flex items-center justify-around px-space-xs">
+      ${items.map(it => `
+        <a href="${it.href}" class="flex flex-col items-center justify-center gap-0.5 min-w-[64px] min-h-[48px] py-1 transition-colors ${active===it.key?'text-primary':'text-on-surface-variant hover:text-on-surface'}">
+          ${icon(it.icon,'text-[24px]')}
+          <span class="font-label-sm text-label-sm ${active===it.key?'font-bold':''}">${it.label}</span>
+        </a>`).join('')}
+    </div>
+  </nav>`;
+}
+
+/* ================= MODAL ================= */
+function renderModal() {
+  const m = state.ui.modal;
+  if (!m) return '';
+  let inner = '';
+  if (m.type === 'schedule') inner = modalSchedule(m);
+  else if (m.type === 'reschedule') inner = modalReschedule(m);
+  else if (m.type === 'swap-sequence') inner = modalSwapSequence(m);
+  else if (m.type === 'add-exercise-to-sequence') inner = modalAddExerciseToSequence(m);
+  else if (m.type === 'session-exercise-picker') inner = modalSessionExercisePicker(m);
+  else if (m.type === 'finish-save-choice') inner = modalFinishSaveChoice(m);
+  else if (m.type === 'new-exercise') inner = modalNewExercise(m);
+  else if (m.type === 'finish-workout') inner = modalFinishWorkout(m);
+  else if (m.type === 'discard-confirm') inner = modalDiscardConfirm(m);
+  else if (m.type === 'start-workout-pick') inner = modalStartWorkoutPick(m);
+  else if (m.type === 'rename-sequence') inner = modalRenameSequence(m);
+  else if (m.type === 'delete-sequence-confirm') inner = modalDeleteSequenceConfirm(m);
+  else if (m.type === 'draft-nav-confirm') inner = modalDraftNavConfirm(m);
+  else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
+  else if (m.type === 'cancel-scheduled-confirm') inner = modalCancelScheduledConfirm(m);
+  else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
+  else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
+  return `
+  <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
+    <div class="absolute inset-0 bg-on-background/40" data-action="close-modal"></div>
+    <div class="relative w-full sm:max-w-md bg-surface-container-lowest rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[88vh] overflow-y-auto p-space-lg pb-safe">
+      ${inner}
+    </div>
+  </div>`;
+}
+
+function modalShell(title, bodyHtml, footerHtml) {
+  return `
+    <div class="flex items-center justify-between mb-space-md">
+      <h3 class="font-headline-md text-headline-md text-on-surface">${title}</h3>
+      <button aria-label="Close" data-action="close-modal" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant" type="button">${icon('close','text-[20px]')}</button>
+    </div>
+    <div class="flex flex-col gap-space-md">${bodyHtml}</div>
+    ${footerHtml ? `<div class="mt-space-lg flex flex-col gap-2">${footerHtml}</div>` : ''}
+  `;
+}
+
+function miniDatePicker(m) {
+  const y = m.pickerYear, mo = m.pickerMonth;
+  const first = new Date(y, mo, 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(y, mo+1, 0).getDate();
+  const prevDaysInMonth = new Date(y, mo, 0).getDate();
+  const cells = [];
+  for (let i=startOffset-1;i>=0;i--) cells.push({d: prevDaysInMonth-i, cur:false});
+  for (let d=1; d<=daysInMonth; d++) cells.push({d, cur:true});
+  while (cells.length % 7 !== 0) cells.push({d: cells.length - (startOffset+daysInMonth) + 1, cur:false});
+  function cellDateStr(cell) {
+    const mm = cell.cur ? mo : (cell.d > 15 ? mo-1 : mo+1);
+    return iso(new Date(y, mm, cell.d));
+  }
+  const grid = cells.map(cell => {
+    const dstr = cellDateStr(cell);
+    const isToday = dstr === todayISO();
+    const isSelected = dstr === m.date;
+    let cls = 'text-on-surface hover:bg-surface-container';
+    if (!cell.cur) cls = 'text-outline-variant';
+    if (isSelected) cls = 'bg-primary text-on-primary shadow-md';
+    else if (isToday) cls = 'bg-surface-container-low text-on-surface font-bold';
+    return `<button data-action="picker-select-day" data-date="${dstr}" class="h-9 w-9 mx-auto flex items-center justify-center rounded-full font-label-md text-label-md transition-all ${cls}" type="button">${cell.d}</button>`;
+  }).join('');
+  return `
+  <div class="bg-surface-container-low rounded-xl p-3">
+    <div class="flex items-center justify-between mb-2 px-1">
+      <span class="font-label-lg text-label-lg text-on-surface font-semibold">${MONTHS[mo]} ${y}</span>
+      <div class="flex items-center gap-1">
+        <button data-action="picker-prev-month" aria-label="Previous month" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant" type="button">${icon('chevron_left','text-[18px]')}</button>
+        <button data-action="picker-next-month" aria-label="Next month" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant" type="button">${icon('chevron_right','text-[18px]')}</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-7 mb-1 text-center">${DOW.map(d=>`<span class="font-label-sm text-label-sm text-outline">${d[0]}</span>`).join('')}</div>
+    <div class="grid grid-cols-7 gap-y-1 gap-x-0.5 text-center items-center">${grid}</div>
+  </div>
+  <p class="font-label-md text-label-md text-on-surface-variant text-center mt-1">${fmtFull(m.date)}</p>
+  `;
+}
+function modalSchedule(m) {
+  const seqOptions = state.sequences.filter(s=>!s.archived && !s.draft).map(s=>`<option value="${s.id}" ${s.id===m.sequenceId?'selected':''}>${esc(s.name)}</option>`).join('');
+  return modalShell('Schedule Workout', `
+    <div class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">Date</span>
+      ${miniDatePicker(m)}
+    </div>
+    <label class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">Sequence</span>
+      <select id="f-seq" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">${seqOptions}</select>
+    </label>
+  `, `<button data-action="schedule-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Schedule</button>`);
+}
+function modalReschedule(m) {
+  return modalShell('Reschedule', `
+    <div class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">New date</span>
+      ${miniDatePicker(m)}
+    </div>
+  `, `<button data-action="reschedule-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save new date</button>`);
+}
+function modalSwapSequence(m) {
+  const opts = state.sequences.filter(s=>!s.archived && !s.draft).map(s=>`<option value="${s.id}" ${s.id===m.sequenceId?'selected':''}>${esc(s.name)}</option>`).join('');
+  return modalShell('Swap Sequence', `
+    <label class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">Sequence</span>
+      <select id="f-seq" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">${opts}</select>
+    </label>
+  `, `<button data-action="swap-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Swap</button>`);
+}
+function modalAddExerciseToSequence(m) {
+  const already = new Set(getSequence(m.seqId).exercises.map(sx => sx.exerciseId));
+  const list = state.exercises.filter(e => !already.has(e.id) && (!m.q || e.name.toLowerCase().includes(m.q.toLowerCase())));
+  return modalShell('Add Exercise', `
+    <input id="f-search" data-action-input="lib-pick-search" value="${esc(m.q||'')}" placeholder="Search exercises…" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+    <div class="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
+      ${list.map(e => `
+        <button data-action="add-exercise-confirm" data-seq-id="${m.seqId}" data-exercise-id="${e.id}" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-surface-container-low flex items-center justify-between gap-2" type="button">
+          <span>
+            <span class="block font-label-lg text-label-lg text-on-surface">${esc(e.name)}</span>
+            <span class="block font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'}</span>
+          </span>
+          ${icon('add_circle','text-[22px] text-primary')}
+        </button>`).join('') || `<p class="text-on-surface-variant font-body-md text-body-md p-2">No matches.</p>`}
+    </div>
+  `, `<button data-action="open-new-exercise" data-seq-id="${m.seqId}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('add','text-[20px]')} Create custom exercise</button>`);
+}
+function modalSessionExercisePicker(m) {
+  const list = state.exercises.filter(e => !m.q || e.name.toLowerCase().includes(m.q.toLowerCase()));
+  const title = m.mode === 'swap' ? 'Swap Exercise' : 'Add Exercise';
+  return modalShell(title, `
+    <input id="f-search" data-action-input="lib-pick-search" value="${esc(m.q||'')}" placeholder="Search exercises…" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+    <div class="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
+      ${list.map(e => `
+        <button data-action="session-exercise-pick-confirm" data-mode="${m.mode}" data-ex-idx="${m.exIdx ?? ''}" data-exercise-id="${e.id}" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-surface-container-low flex items-center justify-between gap-2" type="button">
+          <span>
+            <span class="block font-label-lg text-label-lg text-on-surface">${esc(e.name)}</span>
+            <span class="block font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'}</span>
+          </span>
+          ${icon('add_circle','text-[22px] text-primary')}
+        </button>`).join('') || `<p class="text-on-surface-variant font-body-md text-body-md p-2">No matches.</p>`}
+    </div>
+  `, `<button data-action="open-new-exercise" data-mode="${m.mode}" data-ex-idx="${m.exIdx ?? ''}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('add','text-[20px]')} Create custom exercise</button>`);
+}
+function modalNewExercise(m) {
+  return modalShell('New Custom Exercise', `
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Name</span>
+      <input id="nf-name" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+    </label>
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Category</span>
+      <select id="nf-category" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">${CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select>
+    </label>
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Equipment</span>
+      <input id="nf-equipment" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40" placeholder="e.g. Dumbbell, Barbell, Machine">
+    </label>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Laterality</span>
+        <select id="nf-laterality" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+          <option value="bilateral">Bilateral</option><option value="unilateral">Unilateral</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Load type</span>
+        <select id="nf-loadtype" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+          <option value="single_total">Single total</option>
+          <option value="per_side">Per side (hand, leg, etc.)</option>
+          <option value="machine_stack">Machine/cable stack</option>
+          <option value="bodyweight">Bodyweight</option>
+          <option value="assisted">Assisted</option>
+        </select>
+      </label>
+    </div>
+  `, `<button data-action="new-exercise-save" data-seq-id="${m.seqId||''}" data-mode="${m.mode||''}" data-ex-idx="${m.exIdx ?? ''}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Exercise</button>`);
+}
+function modalFinishWorkout(m) {
+  const s = state.activeSession;
+  const elapsed = Math.floor((Date.now() - s.startedAt)/1000);
+  const incomplete = sessionIncompleteSets(s);
+  return modalShell('Finish Workout', `
+    <div class="bg-surface-container-low rounded-xl p-3 flex items-center justify-between">
+      <span class="font-label-md text-label-md text-on-surface-variant">Duration</span>
+      <span class="font-numeric-metric text-numeric-metric text-on-surface">${fmtDuration(elapsed)}</span>
+    </div>
+    ${incomplete.length ? `
+    <div class="bg-tertiary-fixed/20 rounded-xl p-3 flex flex-col gap-1.5">
+      <div class="flex items-center gap-1.5 text-tertiary">${icon('warning','text-[18px]')}<span class="font-label-md text-label-md font-bold">${incomplete.length} set${incomplete.length>1?'s':''} missing weight, reps, or RPE</span></div>
+      <div class="flex flex-col gap-0.5">
+        ${incomplete.map(i=>`<p class="font-label-sm text-label-sm text-on-surface-variant"><span class="text-on-surface font-semibold">${esc(i.exName)}</span> — ${esc(i.label)}</p>`).join('')}
+      </div>
+    </div>` : ''}
+  `, `
+    <button data-action="finish-workout-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('flag','text-[20px]')} Finish & Save</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Keep going</button>
+  `);
+}
+function modalFinishSaveChoice(m) {
+  const s = state.activeSession;
+  const seq = getSequence(s.sequenceId);
+  const seqName = seq ? seq.name : s.sequenceName;
+  return modalShell('Save Changes?', `
+    <p class="font-body-md text-body-md text-on-surface-variant">The exercises in this session don't match "${esc(seqName)}" anymore — you swapped or added some. What should happen to the sequence?</p>
+  `, `
+    <button data-action="finish-save-choice-confirm" data-choice="existing" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('save','text-[20px]')}Update "${esc(seqName)}"</button>
+    <button data-action="finish-save-choice-confirm" data-choice="new" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('add_circle','text-[20px]')}Save as a new sequence</button>
+    <button data-action="finish-save-choice-confirm" data-choice="none" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Just for today — don't change the sequence</button>
+  `);
+}
+function modalDiscardConfirm(m) {
+  return modalShell('Active workout in progress', `
+    <p class="font-body-md text-body-md text-on-surface-variant">You already have an unfinished workout. Resume it, or discard it and start this one instead?</p>
+  `, `
+    <button data-action="go" data-href="#/workout" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Resume active workout</button>
+    <button data-action="discard-and-start" data-sequence-id="${m.sequenceId}" data-scheduled-id="${m.scheduledId||''}" class="w-full h-11 rounded-full bg-error-container text-on-error-container font-label-md text-label-md">Discard and start new</button>
+  `);
+}
+function modalStartWorkoutPick(m) {
+  return modalShell('Start a Workout', `
+    <div class="flex flex-col gap-1.5">
+      ${state.sequences.filter(s=>!s.archived && !s.draft).map(s => `
+        <button data-action="start-workout" data-sequence-id="${s.id}" class="w-full text-left px-3 py-3 rounded-lg hover:bg-surface-container-low flex items-center justify-between" type="button">
+          <span>
+            <span class="block font-label-lg text-label-lg text-on-surface">${esc(s.name)}</span>
+            <span class="block font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises</span>
+          </span>
+          ${icon('play_arrow','text-[22px] text-primary')}
+        </button>`).join('')}
+    </div>
+  `, '');
+}
+function modalRenameSequence(m) {
+  return modalShell('Rename Sequence', `
+    <input id="f-rename" value="${esc(m.name)}" class="h-12 px-3 rounded-lg bg-surface-container-low border ${m.error?'border-error':'border-outline-variant/40'}">
+    ${m.error ? `<p class="font-label-sm text-label-sm text-error -mt-2 flex items-center gap-1">${icon('error','text-[14px]')}${esc(m.error)}</p>` : ''}
+  `, `<button data-action="rename-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save</button>`);
+}
+function modalDeleteSequenceConfirm(m) {
+  const seq = getSequence(m.id);
+  const isDraft = !!(seq && seq.draft);
+  return modalShell(isDraft ? 'Discard Draft' : 'Delete Sequence', `
+    <p class="font-body-md text-body-md text-on-surface-variant">${isDraft
+      ? `Discard "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>"? This unsaved draft and its exercises will be removed. This can't be undone.`
+      : `Delete "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>"? This permanently removes the sequence and its exercise prescriptions. Past logged workouts and history are not affected. This can't be undone.`}</p>
+  `, `
+    <button data-action="delete-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">${isDraft ? 'Discard Draft' : 'Delete Sequence'}</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Cancel</button>
+  `);
+}
+function modalDraftNavConfirm(m) {
+  const seq = getSequence(m.id);
+  return modalShell('Save This Draft?', `
+    <p class="font-body-md text-body-md text-on-surface-variant">You're leaving "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>" before saving it as a sequence. Keep it as a draft to finish later, or discard it?</p>
+  `, `
+    <button data-action="draft-nav-save" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('check_circle','text-[20px]')}Save Draft</button>
+    <button data-action="draft-nav-discard" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5">${icon('delete','text-[16px]')}Discard</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5">${icon('edit','text-[16px]')}Keep Editing</button>
+  `);
+}
+function modalCancelSessionConfirm() {
+  return modalShell('Cancel Workout?', `
+    <p class="font-body-md text-body-md text-on-surface-variant">This will discard everything logged in this session. It won't be saved to history. This can't be undone.</p>
+  `, `
+    <button data-action="cancel-session-confirm" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Discard Session</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Keep Going</button>
+  `);
+}
+function modalCancelScheduledConfirm(m) {
+  const sc = state.scheduledSessions.find(x => x.id === m.id);
+  const seq = sc ? getSequence(sc.sequenceId) : null;
+  return modalShell('Cancel Scheduled Workout?', `
+    <p class="font-body-md text-body-md text-on-surface-variant">Remove "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>" from ${sc ? fmtShort(sc.date) : ''}? This can't be undone.</p>
+  `, `
+    <button data-action="cancel-scheduled-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Remove from Calendar</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Keep It</button>
+  `);
+}
+
+/* ================= HOME ================= */
+function renderHome() {
+  return state.role === 'client' ? renderHomeClient() : renderHomeTrainer();
+}
+
+function renderHomeClient() {
+  const next = upcomingScheduled()[0];
+  const nextSeq = next ? getSequence(next.sequenceId) : null;
+  const recent = completedSessionsSorted()[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
+  let prCard = '';
+  if (recent) {
+    for (const ex of recent.exercises) {
+      const top = topWorkingSet(ex);
+      if (!top) continue;
+      const prev = findPreviousExerciseBlock(ex.exerciseId, recent.date, recent.id);
+      const cmp = prev ? compareTopSet(topWorkingSet(prev.block), top) : null;
+      if (cmp) {
+        prCard = `
+        <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+              <span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary font-bold">Progress Highlight</span>
+            </div>
+            <div class="inline-flex items-center gap-1 bg-surface-container-low px-2 py-0.5 rounded-full text-primary">
+              ${icon('trending_up','text-[14px]')}<span class="font-label-sm text-label-sm font-bold">${cmp.type==='reps'?'+reps':cmp.type==='weight'?'+weight':'lower RPE'}</span>
+            </div>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <div>
+              <h4 class="font-title-md text-title-md text-on-surface font-semibold">${esc(ex.nameSnapshot)}</h4>
+              <p class="font-label-md text-label-md text-on-surface-variant mt-0.5">${cmp.text}</p>
+            </div>
+            <div class="text-right">
+              <span class="font-numeric-metric text-numeric-metric text-on-surface">${top.weight ?? '–'} <span class="text-label-md font-body-md text-on-surface-variant">kg</span></span>
+              <span class="block font-label-sm text-label-sm text-on-surface-variant">${repsOf(top)} reps</span>
+            </div>
+          </div>
+        </div>`;
+        break;
+      }
+    }
+  }
+
+  return `
+  <section class="flex flex-col gap-1.5 pt-2">
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile text-on-surface tracking-tight">${greeting}, ${esc(currentUser().name)}</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant mt-0.5">Ready for today's strength session?</p>
+  </section>
+
+  ${next ? `
+  <section class="relative bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col gap-space-md overflow-hidden mt-space-lg">
+    <div class="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-primary-fixed/20 pointer-events-none blur-2xl"></div>
+    <div class="flex flex-wrap items-center justify-between gap-2 relative z-10">
+      <div class="flex items-center gap-1.5 bg-primary-fixed/40 text-on-primary-fixed px-3 py-1 rounded-full">
+        ${icon('fitness_center','text-[16px] text-primary')}
+        <span class="font-label-sm text-label-sm font-bold uppercase tracking-wider">${next.date===todayISO() ? "Today's Session" : fmtShort(next.date)}</span>
+      </div>
+      <div class="flex items-center gap-1 bg-surface-container text-on-surface-variant px-2.5 py-1 rounded-full">
+        ${icon('verified','text-[14px] text-secondary')}
+        <span class="font-label-sm text-label-sm font-medium">Planned by ${esc(roleName(next.plannedBy))}</span>
+      </div>
+    </div>
+    <div class="flex flex-col gap-1 relative z-10">
+      <h2 class="font-headline-lg text-headline-lg text-on-surface font-bold">${esc(nextSeq.name)}</h2>
+    </div>
+    <div class="grid grid-cols-3 gap-2 py-1 relative z-10">
+      <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
+        <div class="flex items-center gap-1 text-on-surface-variant">${icon('format_list_bulleted','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Exercises</span></div>
+        <span class="font-title-md text-title-md text-on-surface font-bold mt-1">${nextSeq.exercises.length} Moves</span>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
+        <div class="flex items-center gap-1 text-on-surface-variant">${icon('schedule','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Rest</span></div>
+        <span class="font-title-md text-title-md text-on-surface font-bold mt-1">~${Math.round(nextSeq.exercises.reduce((a,e)=>a+e.prescription.restSeconds,0)/60)}m</span>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
+        <div class="flex items-center gap-1 text-on-surface-variant">${icon('speed','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Intensity</span></div>
+        <span class="font-title-md text-title-md text-primary font-bold mt-1">RPE ${nextSeq.exercises[0].prescription.intensityTarget}</span>
+      </div>
+    </div>
+    <div class="pt-1 relative z-10">
+      <button data-action="start-workout" data-sequence-id="${nextSeq.id}" data-scheduled-id="${next.id}" class="w-full h-14 bg-primary active:scale-[0.98] transition-all rounded-full flex items-center justify-center gap-3 text-on-primary shadow-sm" type="button">
+        ${icon('play_arrow','text-[20px]')}
+        <span class="font-title-md text-title-md tracking-wide font-bold">Start Workout</span>
+      </button>
+    </div>
+  </section>` : `
+  <section class="mt-space-lg bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col items-center text-center gap-2">
+    ${icon('event_available','text-[28px] text-on-surface-variant')}
+    <p class="font-body-md text-body-md text-on-surface-variant">No workout scheduled yet. Check the calendar or ask your trainer.</p>
+    <a href="#/calendar" class="font-label-lg text-label-lg text-primary font-bold">Open Calendar</a>
+  </section>`}
+
+  <section class="flex flex-col gap-space-sm mt-space-lg">
+    <div class="flex items-center justify-between px-1"><h3 class="font-headline-md text-headline-md text-on-surface">Recent Momentum</h3></div>
+    <div class="grid grid-cols-1 gap-space-sm">
+      ${recent ? `
+      <button data-action="go" data-href="#/history/session/${recent.id}" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 text-left" type="button">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center flex-shrink-0 text-primary">${icon('task_alt','text-[26px]')}</div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Last Session • ${fmtShort(recent.date)}</span>
+              <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+              <span class="font-label-sm text-label-sm ${recent.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${recent.reviewedByTrainer?'Reviewed ✓':'Pending review'}</span>
+            </div>
+            <h4 class="font-title-md text-title-md text-on-surface truncate font-semibold">${esc(recent.sequenceName)}</h4>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(recent.durationSeconds)}</span>
+              <span class="text-outline-variant">•</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${sessionStats(recent).workingSets+sessionStats(recent).dropSets} sets logged</span>
+            </div>
+          </div>
+        </div>
+        ${icon('chevron_right','text-[20px] text-on-surface-variant')}
+      </button>` : ''}
+      ${prCard}
+    </div>
+  </section>
+
+  <section class="flex flex-col gap-space-sm mt-space-lg">
+    <div class="flex items-center justify-between px-1">
+      <h3 class="font-headline-md text-headline-md text-on-surface">Upcoming Schedule</h3>
+      <a href="#/calendar" class="font-label-sm text-label-sm text-primary font-semibold">View calendar</a>
+    </div>
+    <div class="flex flex-col gap-2">
+      ${upcomingScheduled().slice(0,3).map(s => scheduleRow(s)).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">Nothing scheduled.</p>`}
+    </div>
+  </section>
+  `;
+}
+
+function scheduleRow(s) {
+  const seq = getSequence(s.sequenceId);
+  const d = new Date(s.date + 'T00:00:00');
+  const wd = ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()];
+  return `
+  <div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-11 h-11 rounded-lg bg-surface-container-low flex flex-col items-center justify-center flex-shrink-0">
+        <span class="font-label-sm text-label-sm text-on-surface-variant font-medium leading-none">${wd}</span>
+        <span class="font-title-md text-title-md text-on-surface font-bold leading-none mt-1">${d.getDate()}</span>
+      </div>
+      <div class="flex flex-col min-w-0">
+        <span class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(seq.name)}</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(roleName(s.plannedBy))}</span>
+      </div>
+    </div>
+    <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-on-surface flex-shrink-0" type="button">${icon('chevron_right','text-[20px]')}</button>
+  </div>`;
+}
+
+function renderHomeTrainer() {
+  const client = state.users.client;
+  const next = upcomingScheduled()[0];
+  const nextSeq = next ? getSequence(next.sequenceId) : null;
+  const awaiting = sessionsAwaitingReview();
+  const recent = completedSessionsSorted()[0];
+  return `
+  <section class="flex flex-col gap-1.5 pt-2">
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile text-on-surface tracking-tight">Good day, ${esc(currentUser().name)}</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant mt-0.5">Here's where ${esc(client.name)} stands today.</p>
+  </section>
+
+  ${next ? `
+  <section class="mt-space-lg bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col gap-space-sm">
+    <div class="flex items-center justify-between">
+      <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">Next session</span>
+      <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(next.date)}</span>
+    </div>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface font-bold">${esc(nextSeq.name)}</h2>
+    <div class="flex items-center gap-2">
+      <button data-action="start-workout" data-sequence-id="${nextSeq.id}" data-scheduled-id="${next.id}" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[18px]')} Log this session</button>
+      <a href="#/calendar" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('calendar_today','text-[20px]')}</a>
+    </div>
+  </section>` : ''}
+
+  <section class="flex flex-col gap-space-sm mt-space-lg">
+    <div class="flex items-center justify-between px-1">
+      <h3 class="font-headline-md text-headline-md text-on-surface">Awaiting Review</h3>
+      <span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded-full font-bold">${awaiting.length}</span>
+    </div>
+    ${awaiting.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">All caught up — nothing waiting on you.</p>` :
+      awaiting.map(s => `
+      <button data-action="go" data-href="#/history/session/${s.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-2" type="button">
+        <div class="min-w-0">
+          <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</span>
+          <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
+        </div>
+        ${icon('chevron_right','text-[20px] text-on-surface-variant flex-shrink-0')}
+      </button>`).join('')}
+  </section>
+
+  ${recent ? `
+  <section class="flex flex-col gap-space-sm mt-space-lg">
+    <h3 class="font-headline-md text-headline-md text-on-surface px-1">Recent Workout</h3>
+    <button data-action="go" data-href="#/history/session/${recent.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between" type="button">
+      <div class="min-w-0">
+        <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(recent.date)}</span>
+        <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(recent.sequenceName)}</h4>
+      </div>
+      ${icon('chevron_right','text-[20px] text-on-surface-variant')}
+    </button>
+  </section>` : ''}
+
+  <section class="flex flex-col gap-space-sm mt-space-lg">
+    <h3 class="font-headline-md text-headline-md text-on-surface px-1">Program</h3>
+    <div class="grid grid-cols-2 gap-2">
+      <a href="#/sequences" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-1 items-start">${icon('fitness_center','text-[22px] text-primary')}<span class="font-label-lg text-label-lg text-on-surface font-semibold">Sequences</span></a>
+      <a href="#/calendar" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-1 items-start">${icon('calendar_month','text-[22px] text-secondary')}<span class="font-label-lg text-label-lg text-on-surface font-semibold">Calendar</span></a>
+    </div>
+  </section>
+  `;
+}
+
+/* ================= CALENDAR ================= */
+function schedulesOnDate(d) { return state.scheduledSessions.filter(s => s.date === d); }
+
+function renderCalendar() {
+  const { calYear, calMonth, calView, calSelectedDate } = state.ui;
+  const first = new Date(calYear, calMonth, 1);
+  const startOffset = (first.getDay() + 6) % 7; // Monday-start
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const prevDaysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const cells = [];
+  for (let i=startOffset-1;i>=0;i--) cells.push({d: prevDaysInMonth-i, cur:false});
+  for (let d=1; d<=daysInMonth; d++) cells.push({d, cur:true});
+  while (cells.length % 7 !== 0) cells.push({d: cells.length - (startOffset+daysInMonth) + 1, cur:false});
+
+  const monthLabel = `${MONTHS[calMonth].slice(0,3)} ${calYear}`;
+  const completedCount = state.scheduledSessions.filter(s=>s.status==='completed' && new Date(s.date+'T00:00:00').getMonth()===calMonth && new Date(s.date+'T00:00:00').getFullYear()===calYear).length;
+  const plannedCount = state.scheduledSessions.filter(s=>s.status==='planned' && new Date(s.date+'T00:00:00').getMonth()===calMonth && new Date(s.date+'T00:00:00').getFullYear()===calYear).length;
+
+  function cellDateStr(cell) {
+    const m = cell.cur ? calMonth : (cell.d > 15 ? calMonth-1 : calMonth+1);
+    const dt = new Date(calYear, m, cell.d);
+    return iso(dt);
+  }
+
+  const grid = cells.map(cell => {
+    const dstr = cellDateStr(cell);
+    const scheds = cell.cur ? schedulesOnDate(dstr) : [];
+    const isToday = dstr === todayISO();
+    const isSelected = dstr === calSelectedDate;
+    let cls = 'text-on-surface hover:bg-surface-container';
+    if (!cell.cur) cls = 'text-outline-variant';
+    if (isSelected) cls = 'bg-primary text-on-primary shadow-md scale-105';
+    else if (isToday) cls = 'bg-surface-container-low text-on-surface font-bold';
+    const dot = scheds.length ? `<span class="absolute bottom-1 w-1.5 h-1.5 rounded-full ${scheds.some(s=>s.status==='completed')?'bg-primary':'bg-secondary'} ${isSelected?'!bg-on-primary':''}"></span>` : '';
+    return `<button data-action="cal-select-day" data-date="${dstr}" class="h-10 w-10 mx-auto flex flex-col items-center justify-center rounded-full font-label-md text-label-md relative transition-all ${cls}" type="button"><span>${cell.d}</span>${dot}</button>`;
+  }).join('');
+
+  const selectedList = schedulesOnDate(calSelectedDate);
+
+  return `
+  <div class="flex flex-col gap-space-sm pt-2 mb-space-md">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-space-xs">
+        <h2 class="font-headline-md text-headline-md text-on-surface">${monthLabel}</h2>
+        <div class="flex items-center">
+          <button data-action="cal-prev-month" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant" type="button">${icon('chevron_left','text-[20px]')}</button>
+          <button data-action="cal-next-month" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant" type="button">${icon('chevron_right','text-[20px]')}</button>
+        </div>
+      </div>
+      <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm">
+        <button data-action="cal-view" data-view="month" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('calendar_month','text-[16px]')}Month</button>
+        <button data-action="cal-view" data-view="list" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='list'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('format_list_bulleted','text-[16px]')}List</button>
+      </div>
+    </div>
+  </div>
+
+  ${calView==='month' ? `
+  <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm">
+    <div class="grid grid-cols-7 mb-2 text-center">${DOW.map(d=>`<span class="font-label-sm text-label-sm text-outline">${d[0]}</span>`).join('')}</div>
+    <div class="grid grid-cols-7 gap-y-1.5 gap-x-1 text-center items-center">${grid}</div>
+    <div class="flex items-center justify-center gap-6 mt-4 pt-3 bg-surface-container-low/50 rounded-xl px-2 py-2">
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-primary"></span><span class="font-label-sm text-label-sm text-on-surface-variant">Completed (${completedCount})</span></div>
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-secondary"></span><span class="font-label-sm text-label-sm text-on-surface-variant">Scheduled (${plannedCount})</span></div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between gap-space-sm mt-space-md">
+    <button data-action="open-schedule-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('add_circle','text-[20px]')}Schedule Workout</button>
+  </div>
+
+  <div class="mt-space-md bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-sm">
+    <div class="flex items-center justify-between">
+      <h3 class="font-title-md text-title-md text-on-surface">${fmtFull(calSelectedDate)}</h3>
+      ${calSelectedDate===todayISO() ? pill('Today', 'bg-primary-fixed text-on-primary-fixed') : ''}
+    </div>
+    ${selectedList.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">Nothing scheduled. Tap "Schedule Workout" to plan one.</p>` :
+      selectedList.map(s => dayDetailCard(s)).join('')}
+  </div>
+  ` : `
+  <div class="flex flex-col gap-space-sm">
+    ${state.scheduledSessions.filter(s=>s.date>=todayISO()).sort((a,b)=>a.date.localeCompare(b.date)).map(s => listFeedCard(s)).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No upcoming sessions.</p>`}
+  </div>
+  `}
+  `;
+}
+
+function sequenceExerciseListRows(exercises) {
+  return exercises.map((sx, i) => {
+    const ex = getExercise(sx.exerciseId); const p = sx.prescription;
+    return `
+    <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-container-low">
+      <span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">${i+1}</span>
+      <span class="font-label-md text-label-md text-on-surface truncate flex-1 min-w-0">${esc(ex.name)}</span>
+      <span class="font-label-sm text-label-sm text-on-surface-variant flex-shrink-0 text-right">${p.sets} × ${p.repLow}-${p.repHigh} reps${p.drops.length?`<span class="block text-tertiary">+${p.drops.length} drop${p.drops.length>1?'s':''}</span>`:''}</span>
+    </div>`;
+  }).join('');
+}
+function dayDetailCard(s) {
+  const seq = getSequence(s.sequenceId);
+  const statusPill = s.status==='completed' ? pill('Completed','bg-primary-fixed text-on-primary-fixed-variant') :
+    s.status==='skipped' ? pill('Skipped','bg-error-container text-on-error-container') : pill('Planned','bg-surface-container text-on-surface-variant');
+  return `
+  <div class="flex flex-col gap-2 border-t border-outline-variant/30 pt-3 mt-1 first:border-t-0 first:pt-0 first:mt-0">
+    <div class="flex items-center justify-between gap-2">
+      <h4 class="font-headline-md text-headline-md text-on-surface min-w-0 truncate">${esc(seq.name)}</h4>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        ${statusPill}
+        ${s.status==='planned' ? `<button data-action="open-cancel-scheduled" data-id="${s.id}" aria-label="Cancel scheduled session" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container transition-colors" type="button">${icon('close','text-[18px]')}</button>` : ''}
+      </div>
+    </div>
+    <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
+      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(roleName(s.plannedBy))}</span>
+      <span>•</span>
+      <span class="flex items-center gap-1">${icon('schedule','text-[16px]')}~${Math.round(seq.exercises.reduce((a,e)=>a+e.prescription.restSeconds,0)/60)+seq.exercises.length*4}m</span>
+    </div>
+    <div class="flex flex-col gap-1 mt-1">
+      ${sequenceExerciseListRows(seq.exercises)}
+    </div>
+    ${s.status==='planned' ? `
+    <div class="flex flex-col gap-2 mt-2">
+      <button data-action="start-workout" data-sequence-id="${seq.id}" data-scheduled-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[20px]')}Start This Workout</button>
+      <div class="grid grid-cols-2 gap-2">
+        <button data-action="open-reschedule" data-id="${s.id}" class="h-10 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5" type="button">${icon('calendar_clock','text-[16px]')}Reschedule</button>
+        <button data-action="open-swap" data-id="${s.id}" class="h-10 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center justify-center gap-1.5" type="button">${icon('swap_horiz','text-[16px]')}Swap Sequence</button>
+      </div>
+    </div>` : s.linkedWorkoutSessionId ? `
+      <button data-action="go" data-href="#/history/session/${s.linkedWorkoutSessionId}" class="w-full h-11 rounded-full bg-surface-container text-on-surface font-label-md text-label-md mt-1" type="button">View logged session</button>
+    ` : ''}
+  </div>`;
+}
+
+function listFeedCard(s) {
+  const seq = getSequence(s.sequenceId);
+  const d = new Date(s.date+'T00:00:00');
+  const wd = ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()];
+  return `
+  <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl bg-secondary-fixed/50 flex flex-col items-center justify-center text-center">
+          <span class="font-label-sm text-label-sm text-on-secondary-fixed-variant leading-none">${wd}</span>
+          <span class="font-title-md text-title-md font-bold text-on-secondary-fixed leading-tight">${d.getDate()}</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(seq.name)}</h4>
+          <span class="font-label-sm text-label-sm text-on-surface-variant">Planned by ${esc(roleName(s.plannedBy))}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        ${pill('Planned','bg-surface-container text-on-surface-variant')}
+        <button data-action="open-cancel-scheduled" data-id="${s.id}" aria-label="Cancel scheduled session" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container transition-colors" type="button">${icon('close','text-[18px]')}</button>
+      </div>
+    </div>
+    <div class="flex items-center justify-between pt-2 bg-surface-container-low/40 rounded-xl px-3 py-2">
+      <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>esc(getExercise(sx.exerciseId).name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
+      <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
+    </div>
+  </div>`;
+}
+
+/* ================= SEQUENCES ================= */
+function renderSequencesList() {
+  const drafts = state.sequences.filter(s=>s.draft);
+  const active = state.sequences.filter(s=>!s.archived && !s.draft);
+  const archived = state.sequences.filter(s=>s.archived && !s.draft);
+  const isTrainer = true; // sequence & library editing is open to both roles in this prototype
+  return `
+  <div class="flex items-center justify-between pt-2 mb-space-md">
+    <h2 class="font-headline-lg text-headline-lg text-on-surface">Sequences</h2>
+    <div class="flex items-center gap-2">
+      <a href="#/library" class="h-10 px-3 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5">${icon('menu_book','text-[18px]')}Library</a>
+      ${isTrainer ? `<button data-action="new-sequence" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>` : ''}
+    </div>
+  </div>
+  ${drafts.length ? `
+  <div class="mb-space-lg">
+    <h3 class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary px-1 mb-2">Drafts</h3>
+    <div class="flex flex-col gap-space-sm">${drafts.map(s => sequenceCard(s, isTrainer)).join('')}</div>
+  </div>` : ''}
+  <div class="flex flex-col gap-space-sm">
+    ${active.map(s => sequenceCard(s, isTrainer)).join('')}
+  </div>
+  ${archived.length ? `
+  <div class="mt-space-lg">
+    <h3 class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant px-1 mb-2">Archived</h3>
+    <div class="flex flex-col gap-space-sm opacity-70">${archived.map(s => sequenceCard(s, isTrainer)).join('')}</div>
+  </div>` : ''}
+  `;
+}
+
+function sequenceCard(s, isTrainer) {
+  const lastUsed = state.scheduledSessions.filter(sc=>sc.sequenceId===s.id && sc.status==='completed').sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const isDraft = !!s.draft;
+  const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
+  return `
+  <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2 ${isDraft ? 'border border-tertiary-fixed-dim/60' : ''}">
+    <div class="flex items-center justify-between gap-2">
+      <div class="min-w-0 flex-1">
+        ${isRenaming ? `
+        <div class="flex items-center gap-1.5">
+          <input id="f-inline-rename-${s.id}" value="${esc(state.ui.inlineRenameDraft ?? s.name)}" autofocus onkeydown="if(event.key==='Enter'){actions['confirm-inline-rename']({id:'${s.id}'})}else if(event.key==='Escape'){actions['cancel-inline-rename']({})}" class="flex-1 min-w-0 h-10 px-2.5 rounded-lg bg-surface-container-low border ${state.ui.inlineRenameError?'border-error':'border-primary'} text-on-surface font-title-md text-title-md font-semibold">
+          <button data-action="confirm-inline-rename" data-id="${s.id}" aria-label="Save name" class="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0" type="button">${icon('check','text-[18px]')}</button>
+          <button data-action="cancel-inline-rename" aria-label="Cancel rename" class="w-9 h-9 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center flex-shrink-0" type="button">${icon('close','text-[18px]')}</button>
+        </div>
+        ${state.ui.inlineRenameError ? `<p class="font-label-sm text-label-sm text-error mt-1 flex items-center gap-1">${icon('error','text-[14px]')}${esc(state.ui.inlineRenameError)}</p>` : ''}` : `
+        <button data-action="go" data-href="#/sequences/${s.id}" class="text-left min-w-0 w-full" type="button">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h4 ${isTrainer ? `data-action="start-inline-rename" data-id="${s.id}"` : ''} class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.name)}</h4>
+            ${isDraft ? pill('Draft', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
+          </div>
+          <p class="font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises${lastUsed?` • Last used ${fmtShort(lastUsed.date)}`:''}${s.createdBy?` • By ${esc(roleName(s.createdBy))}`:''}</p>
+        </button>`}
+      </div>
+      <button data-action="go" data-href="#/sequences/${s.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
+    </div>
+    <div class="flex flex-col gap-1">
+      ${sequenceExerciseListRows(s.exercises) || (isDraft ? `<p class="font-label-sm text-label-sm text-on-surface-variant px-1">No exercises added yet.</p>` : '')}
+    </div>
+    ${isDraft ? `
+    <button data-action="go" data-href="#/sequences/${s.id}" class="w-full h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm flex items-center justify-center gap-1.5 mt-1" type="button">${icon('edit','text-[16px]')}Continue Editing</button>
+    ` : isTrainer ? `
+    <div class="flex items-center justify-between gap-2 pt-1">
+      <div class="flex items-center gap-2">
+        <button data-action="duplicate-sequence" data-id="${s.id}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1">${icon('content_copy','text-[16px]')}Duplicate</button>
+        <button data-action="archive-toggle" data-id="${s.id}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1">${icon(s.archived?'unarchive':'archive','text-[16px]')}${s.archived?'Unarchive':'Archive'}</button>
+      </div>
+      <button data-action="open-delete-sequence" data-id="${s.id}" aria-label="Delete sequence" class="h-9 w-9 rounded-full bg-surface-container text-error flex items-center justify-center flex-shrink-0">${icon('delete','text-[16px]')}</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderSequenceDetail(seqId) {
+  const s = getSequence(seqId);
+  if (!s) return `<p class="text-on-surface-variant">Sequence not found.</p>`;
+  const isTrainer = true; // sequence & library editing is open to both roles in this prototype
+  const isDraft = !!s.draft;
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-1">
+    <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <button data-action="open-rename" data-id="${s.id}" class="text-left flex-1 min-w-0" type="button">
+      <h2 class="font-headline-lg text-headline-lg text-on-surface truncate">${esc(s.name)}</h2>
+    </button>
+    ${(isTrainer && !isDraft) ? `<button data-action="duplicate-sequence" data-id="${s.id}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant" type="button">${icon('content_copy','text-[18px]')}</button>` : ''}
+    ${(isTrainer && !isDraft) ? `<button data-action="open-delete-sequence" data-id="${s.id}" aria-label="Delete sequence" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
+  </div>
+  <p class="font-body-md text-body-md text-on-surface-variant mb-space-md">${esc(s.description||'')}</p>
+
+  <div class="flex flex-col gap-space-sm">
+    ${s.exercises.map((sx, i) => sequenceExerciseRow(s, sx, i, isTrainer)).join('')}
+  </div>
+
+  ${isTrainer ? `
+  <button data-action="open-add-exercise" data-seq-id="${s.id}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-md" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>
+  ` : ''}
+
+  ${isDraft ? `
+  <button data-action="save-sequence-draft" data-id="${s.id}" ${s.exercises.length===0?'disabled':''} class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm disabled:opacity-40" type="button">${icon('check_circle','text-[20px]')}Save Sequence</button>
+  ${s.exercises.length===0 ? `<p class="font-label-sm text-label-sm text-on-surface-variant text-center mt-2">Add at least one exercise before saving.</p>` : ''}
+  <button data-action="open-delete-sequence" data-id="${s.id}" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5 mt-2" type="button">${icon('delete','text-[16px]')}Discard</button>
+  ` : `
+  <button data-action="start-workout" data-sequence-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm" type="button">${icon('play_arrow','text-[20px]')}Start This Sequence Now</button>
+  `}
+  `;
+}
+
+/* most recent completed session's logged drop-set numbers for an exercise, if any */
+function lastLoggedDropsFor(exerciseId) {
+  for (const s of completedSessionsSorted()) {
+    const block = s.exercises.find(e => e.exerciseId === exerciseId);
+    if (!block) continue;
+    const setWithDrops = block.sets.find(set => (set.drops||[]).some(d => hasSetData(d)));
+    if (setWithDrops) return setWithDrops.drops.filter(d => hasSetData(d));
+  }
+  return null;
+}
+function dropSummary(d, ex) {
+  const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+  if (ex.laterality === 'unilateral') return `L${d.weightLeft ?? '–'}/R${d.weightRight ?? '–'}${unit} × L${d.repsLeft ?? '–'}/R${d.repsRight ?? '–'}`;
+  return `${d.weight ?? '–'}${unit} × ${d.reps ?? '–'}`;
+}
+function sequenceExerciseRow(seq, sx, idx, isTrainer) {
+  const ex = getExercise(sx.exerciseId);
+  const p = sx.prescription;
+  const expanded = state.ui.expandedSeqExIdx === idx;
+  const loggedDrops = expanded ? lastLoggedDropsFor(ex.id) : null;
+  return `
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+    <button data-action="toggle-seq-ex" data-idx="${idx}" class="w-full p-3.5 flex items-center justify-between gap-2 text-left" type="button">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="w-7 h-7 rounded-full bg-surface-container text-on-surface flex items-center justify-center font-label-md text-label-md font-bold flex-shrink-0">${idx+1}</span>
+        <div class="min-w-0">
+          <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(ex.name)}</h4>
+          <p class="font-label-sm text-label-sm text-on-surface-variant">${p.sets} sets • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'}${p.drops.length?` • +${p.drops.length} drop${p.drops.length>1?'s':''}`:''}</p>
+        </div>
+      </div>
+      ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
+    </button>
+    ${expanded ? `
+    <div class="px-3.5 pb-3.5 flex flex-col gap-3 border-t border-outline-variant/30 pt-3">
+      ${isTrainer ? `
+      <div class="grid grid-cols-2 gap-2">
+        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Sets</span><input data-bind="sequences.${seqIdx(seq.id)}.exercises.${idx}.prescription.sets" data-type="number" type="text" inputmode="decimal" value="${p.sets}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center"></label>
+        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Tracking</span>
+          <select data-action="set-exercise-laterality" data-exercise-id="${ex.id}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center">
+            <option value="bilateral" ${ex.laterality!=='unilateral'?'selected':''}>Bilateral</option>
+            <option value="unilateral" ${ex.laterality==='unilateral'?'selected':''}>Unilateral (L/R)</option>
+          </select>
+        </label>
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <span class="font-label-sm text-label-sm text-on-surface-variant">Drop sets</span>
+        ${p.drops.map((d,di)=>`
+          <div class="flex items-center gap-2 h-10 px-3 rounded-lg bg-surface-container-low">
+            <span class="font-label-sm text-label-sm text-tertiary font-bold flex-shrink-0">Drop ${di+1}</span>
+            ${loggedDrops && loggedDrops[di] ? `<span class="font-label-sm text-label-sm text-on-surface-variant flex-1 min-w-0 truncate">Last logged: ${esc(dropSummary(loggedDrops[di], ex))}</span>` : `<span class="flex-1"></span>`}
+            <button data-action="remove-drop-preset" data-seq-id="${seq.id}" data-idx="${idx}" data-drop-idx="${di}" class="w-7 h-7 rounded-full flex items-center justify-center text-error flex-shrink-0" type="button">${icon('close','text-[16px]')}</button>
+          </div>`).join('')}
+        <button data-action="add-drop-preset" data-seq-id="${seq.id}" data-idx="${idx}" class="self-start h-8 px-3 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('add','text-[14px]')}Add drop</button>
+      </div>
+      <div class="flex items-center gap-2 pt-1">
+        <button data-action="move-exercise" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="-1" ${idx===0?'disabled':''} class="h-9 w-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface disabled:opacity-30" type="button">${icon('north','text-[16px]')}</button>
+        <button data-action="move-exercise" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="1" ${idx===seq.exercises.length-1?'disabled':''} class="h-9 w-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface disabled:opacity-30" type="button">${icon('south','text-[16px]')}</button>
+        <span class="flex-1"></span>
+        <button data-action="remove-exercise" data-seq-id="${seq.id}" data-idx="${idx}" class="h-9 px-3 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('delete','text-[16px]')}Remove</button>
+      </div>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+function seqIdx(id) { return state.sequences.findIndex(s=>s.id===id); }
+
+/* ================= LIBRARY ================= */
+function renderLibrary() {
+  const q = state.ui.libSearch.toLowerCase();
+  const cat = state.ui.libCategory;
+  const list = state.exercises.filter(e => (!q || e.name.toLowerCase().includes(q)) && (cat==='all' || e.category===cat));
+  const isTrainer = true; // sequence & library editing is open to both roles in this prototype
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-space-md">
+    <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">Exercise Library</h2>
+    ${isTrainer ? `<button data-action="open-new-exercise" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>` : ''}
+  </div>
+  <input data-action-input="lib-search" value="${esc(state.ui.libSearch)}" placeholder="Search exercises…" class="w-full h-11 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40 mb-space-sm">
+  <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-space-sm">
+    ${['all',...CATEGORIES].map(c=>`<button data-action="lib-filter-cat" data-cat="${c}" class="flex-shrink-0 h-9 px-3 rounded-full font-label-sm text-label-sm ${cat===c?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}" type="button">${c==='all'?'All':c}</button>`).join('')}
+  </div>
+  <div class="flex flex-col gap-2">
+    ${list.map(e => `
+    <div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2">
+      <div class="min-w-0">
+        <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(e.name)}</h4>
+        <p class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${esc(e.equipment||'—')} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(e.loadType)}</p>
+      </div>
+      <button data-action="go" data-href="#/history/exercise/${e.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant flex-shrink-0" type="button">${icon('show_chart','text-[18px]')}</button>
+    </div>`).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No exercises match.</p>`}
+  </div>
+  `;
+}
+function loadTypeLabel(t) { return {single_total:'Single load', per_side:'Per side', machine_stack:'Machine stack', bodyweight:'Bodyweight', assisted:'Assisted'}[t] || t; }
+
+/* ================= ACTIVE WORKOUT ================= */
+/* builds a live session exercise block for exerciseId — if this exercise has a previously completed
+   session, follows its actual set/drop structure; otherwise falls back to the given prescription
+   (sequence template default, or a bare 1-set/0-drop prescription when added/swapped in mid-session) */
+function buildSessionExercise(exerciseId, prescription) {
+  const ex = getExercise(exerciseId);
+  const p = prescription || { sets: 1, drops: [], intensityMethod: 'rpe', notes: '', restSeconds: null, repLow: null, repHigh: null, intensityTarget: null };
+  const prev = findPreviousExerciseBlock(exerciseId, todayISO(), null);
+  const prevSets = prev ? prev.block.sets : null;
+  const setCount = prevSets ? prevSets.length : p.sets;
+  const sets = [];
+  for (let i=0;i<setCount;i++) {
+    const set = { id: uid('set'), type:'working', weight:null, weightLeft:null, weightRight:null, reps:null, repsLeft:null, repsRight:null, intensityMethod: p.intensityMethod, intensityValue:null, intensityMethodLeft: p.intensityMethod, intensityValueLeft:null, intensityMethodRight: p.intensityMethod, intensityValueRight:null, note:'', completed:false, drops:[] };
+    const dropCount = prevSets ? (prevSets[i] ? prevSets[i].drops.length : 0) : (i === setCount-1 ? p.drops.length : 0);
+    if (dropCount) {
+      set.drops = Array.from({length: dropCount}, () => ({ id: uid('set'), type:'drop', weight:null, weightLeft:null, weightRight:null, reps:null, repsLeft:null, repsRight:null, intensityMethod: p.intensityMethod, intensityValue:null, intensityMethodLeft: p.intensityMethod, intensityValueLeft:null, intensityMethodRight: p.intensityMethod, intensityValueRight:null, note:'', completed:false }));
+    }
+    sets.push(set);
+  }
+  return { exerciseId: ex.id, nameSnapshot: ex.name, category: ex.category, laterality: ex.laterality, loadType: ex.loadType,
+    trainerNote: p.notes || ex.notes || '', exerciseNote: prev ? (prev.block.exerciseNote || '') : '',
+    restSeconds: p.restSeconds, targetRepLow: p.repLow, targetRepHigh: p.repHigh,
+    targetIntensity: p.intensityTarget, sets };
+}
+function beginWorkout(sequenceId, scheduledId) {
+  const seq = getSequence(sequenceId);
+  const exercises = seq.exercises.map(sx => buildSessionExercise(sx.exerciseId, sx.prescription));
+  state.activeSession = { id: uid('ws'), sequenceId: seq.id, sequenceName: seq.name, scheduledSessionId: scheduledId,
+    date: todayISO(), startedAt: Date.now(), performedBy: state.role, exercises };
+  saveState(); navigate('#/workout');
+}
+/* true when the live session's exercises (swapped/added mid-session) no longer match the sequence it started from */
+function sessionCustomized(s) {
+  const seq = getSequence(s.sequenceId);
+  if (!seq) return false;
+  const a = seq.exercises.map(sx => sx.exerciseId), b = s.exercises.map(e => e.exerciseId);
+  return a.length !== b.length || a.some((id, i) => id !== b[i]);
+}
+/* turns a live session exercise block into a sequence prescription, so "update the sequence" can persist what was actually done */
+function sequenceExerciseFromSessionBlock(e) {
+  const last = e.sets[e.sets.length - 1];
+  return { id: uid('sqx'), exerciseId: e.exerciseId, prescription: {
+    sets: e.sets.length, repLow: e.targetRepLow ?? 8, repHigh: e.targetRepHigh ?? 12,
+    targetWeight: null, intensityMethod: 'rpe', intensityTarget: e.targetIntensity ?? 8,
+    restSeconds: e.restSeconds ?? 75, notes: e.trainerNote || '',
+    drops: last ? (last.drops||[]).map(() => ({weight:null, reps:null})) : []
+  }};
+}
+function finalizeActiveSession() {
+  const s = state.activeSession;
+  const finished = {
+    id: s.id, sequenceId: s.sequenceId, sequenceName: s.sequenceName, scheduledSessionId: s.scheduledSessionId,
+    date: s.date, durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000), performedBy: s.performedBy,
+    reviewedByTrainer: s.performedBy === 'trainer', trainerNote: null, clientNoteForTrainer: '',
+    exercises: s.exercises.map(e => clone(e)),
+  };
+  state.workoutSessions.push(finished);
+  if (s.scheduledSessionId) { const sc = state.scheduledSessions.find(x => x.id === s.scheduledSessionId); if (sc) { sc.status = 'completed'; sc.linkedWorkoutSessionId = finished.id; } }
+  state.activeSession = null; state.ui.modal = null; saveState();
+  navigate('#/summary/' + finished.id);
+}
+
+function renderActiveWorkout() {
+  const s = state.activeSession;
+  if (!s) return `
+    <div class="pt-16 text-center flex flex-col items-center gap-3">
+      ${icon('fitness_center','text-[36px] text-on-surface-variant')}
+      <p class="font-body-md text-body-md text-on-surface-variant">No active workout right now.</p>
+      <button data-action="open-start-picker" class="h-12 px-5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Start a Workout</button>
+    </div>`;
+  const elapsed = Math.floor((Date.now()-s.startedAt)/1000);
+  return `
+  <div class="sticky top-0 z-30 -mx-margin px-margin py-3 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+    <div class="flex items-center justify-between gap-space-sm">
+      <div class="min-w-0">
+        <div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-semibold">Active Session</span></div>
+        <h2 class="font-headline-md text-headline-md text-on-surface truncate">${esc(s.sequenceName)}</h2>
+        <p class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${s.exercises.length} exercises • Logged by ${esc(roleName(s.performedBy))}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button data-action="open-cancel-session" aria-label="Cancel session" class="min-h-[48px] min-w-[48px] w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container rounded-full transition-colors" type="button">${icon('close','text-[20px]')}</button>
+        <div class="flex items-center gap-1.5 px-3 py-2 bg-surface-container rounded-full text-on-surface">${icon('timer','text-[18px] text-primary')}<span id="session-timer" class="font-title-md text-title-md font-bold tracking-tight">${fmtDuration(elapsed)}</span></div>
+        <button data-action="open-finish" class="min-h-[48px] px-4 bg-primary text-on-primary font-label-lg text-label-lg rounded-full shadow-md flex items-center gap-1.5" type="button">${icon('flag','text-[20px]')}Finish</button>
+      </div>
+    </div>
+  </div>
+  ${s.exercises.map((ex, i) => renderWorkoutExercise(ex, i, s)).join('')}
+  <button data-action="open-add-exercise-session" class="w-full h-12 mt-4 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>
+  `;
+}
+
+function renderWorkoutExercise(ex, exIdx, session) {
+  const prevFind = findPreviousExerciseBlock(ex.exerciseId, session.date, null);
+  const prevBlock = prevFind ? prevFind.block : null;
+  return `
+  <section class="mt-4 bg-surface-container-lowest rounded-xl p-4 shadow-sm">
+    <div class="flex items-start justify-between gap-2 mb-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm rounded-full font-bold">${exIdx+1} of ${session.exercises.length}</span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">${esc(ex.category)}</span>
+        </div>
+        <h3 class="font-headline-lg text-headline-lg text-on-surface mt-1 tracking-tight">${esc(ex.nameSnapshot.toUpperCase())}</h3>
+      </div>
+      <button data-action="open-swap-exercise-session" data-ex-idx="${exIdx}" class="flex-shrink-0 h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('swap_horiz','text-[16px]')}Swap</button>
+    </div>
+    ${prevBlock ? `
+    <div class="mb-3 bg-surface-container-low rounded-xl p-3">
+      <div class="flex items-center gap-1.5 text-on-surface-variant mb-1.5">${icon('calendar_today','text-[16px]')}<span class="font-label-sm text-label-sm font-semibold uppercase">Last Session (${fmtShort(prevFind.session.date)})</span></div>
+      <div class="flex flex-col divide-y divide-outline-variant/20">
+        ${prevSetRows(prevBlock)}
+      </div>
+    </div>` : ''}
+    ${state.role === 'client' ? `
+    <label class="flex flex-col gap-1 mb-3">
+      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">${icon('edit_note','text-[16px]')}My Notes</span>
+      <textarea data-bind="activeSession.exercises.${exIdx}.exerciseNote" rows="1" placeholder="e.g. Seat height 4, cable pin 6…" class="w-full px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-on-surface font-body-md text-body-md resize-none">${esc(ex.exerciseNote || '')}</textarea>
+    </label>` : ''}
+    ${ex.laterality!=='unilateral' ? `
+    <div class="flex items-center gap-2 px-1 mb-2 text-on-surface-variant font-label-sm text-label-sm font-bold uppercase tracking-wider">
+      <div class="w-10 flex-shrink-0 text-center">Set</div><div class="flex-1 text-center">Weight</div><div class="flex-1 text-center">Reps</div>
+    </div>` : ''}
+    ${ex.sets.map((set, setIdx) => renderEditableWorkingSet(exIdx, setIdx, set, ex)).join('')}
+    <div class="mt-4 pt-3 flex items-center justify-between gap-2 flex-wrap">
+      ${prevBlock ? `<button data-action="use-last-workout" data-ex-idx="${exIdx}" class="flex-shrink-0 h-10 px-3.5 bg-surface-container-low text-on-surface rounded-full flex items-center gap-1.5 font-label-md text-label-md font-semibold" type="button">${icon('sync_saved_locally','text-[18px] text-secondary')}Use Last Workout</button>` : ''}
+      <button data-action="add-set" data-ex-idx="${exIdx}" class="flex-1 min-h-[44px] px-4 bg-surface-container text-on-surface font-label-lg text-label-lg rounded-full flex items-center justify-center gap-1.5" type="button">${icon('add','text-[20px] text-primary')}Add Set</button>
+      <button data-action="add-drop" data-ex-idx="${exIdx}" class="flex-1 min-h-[44px] px-4 bg-tertiary-fixed text-on-tertiary-fixed font-label-lg text-label-lg rounded-full flex items-center justify-center gap-1.5" type="button">${icon('alt_route','text-[20px] text-tertiary')}Add Drop Set</button>
+    </div>
+  </section>`;
+}
+
+function prevSetRows(block) {
+  let workingIdx = 0;
+  return session_flatSets(block).map(({ set, isDrop }) => {
+    if (!isDrop) workingIdx++;
+    const label = isDrop ? '↳ Drop' : `Set ${workingIdx}`;
+    const unit = block.loadType === 'per_side' ? 'kg/side' : 'kg';
+    const isUni = block.laterality === 'unilateral';
+    const intensity = isUni ? intensityLabelSides(set) : intensityLabel(set);
+    const isFail = isUni ? (set.intensityValueLeft==='failure'||set.intensityValueRight==='failure') : set.intensityValue==='failure';
+    if (isUni) {
+      const side = (w, r) => `${w != null ? `${w}${unit}` : '–'} × ${r ?? '–'}`;
+      return `
+      <div class="flex items-start justify-between gap-2 py-1.5 ${isDrop ? 'pl-3' : ''}">
+        <span class="font-label-sm text-label-sm ${isDrop ? 'text-on-surface-variant' : 'text-on-surface font-bold'} flex-shrink-0 pt-0.5">${label}</span>
+        <div class="flex-1 min-w-0 text-right px-2">
+          <div class="font-body-md text-body-md text-on-surface truncate"><span class="font-label-sm text-label-sm text-on-surface-variant mr-1">L</span>${side(set.weightLeft, set.repsLeft)}</div>
+          <div class="font-body-md text-body-md text-on-surface truncate"><span class="font-label-sm text-label-sm text-on-surface-variant mr-1">R</span>${side(set.weightRight, set.repsRight)}</div>
+        </div>
+        ${intensity ? `<span class="font-label-sm text-label-sm font-bold ${isFail?'text-tertiary':'text-on-surface-variant'} flex-shrink-0 pt-0.5">${intensity}</span>` : ''}
+      </div>`;
+    }
+    return `
+    <div class="flex items-center justify-between gap-2 py-1.5 ${isDrop ? 'pl-3' : ''}">
+      <span class="font-label-sm text-label-sm ${isDrop ? 'text-on-surface-variant' : 'text-on-surface font-bold'} flex-shrink-0">${label}</span>
+      <span class="font-body-md text-body-md text-on-surface flex-1 text-right truncate px-2">${set.weight != null ? `${set.weight}${unit}` : '–'} × ${set.reps ?? '–'}</span>
+      ${intensity ? `<span class="font-label-sm text-label-sm font-bold ${isFail?'text-tertiary':'text-on-surface-variant'} flex-shrink-0">${intensity}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function stepperField(path, value, unit, step, min) {
+  return `
+  <div class="flex items-stretch bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden">
+    <button data-action="adj" data-path="${path}" data-delta="${-step}" data-min="${min}" class="w-8 min-h-[44px] flex items-center justify-center text-on-surface-variant active:bg-surface-container flex-shrink-0" type="button">${icon('remove','text-[16px]')}</button>
+    <div class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 min-w-0">
+      <input data-bind="${path}" data-type="number" type="text" inputmode="decimal" value="${value==null?'':value}" class="w-full min-w-0 bg-transparent outline-none text-center font-numeric-metric text-numeric-metric font-extrabold text-on-surface leading-tight">
+      <span class="font-label-sm text-label-sm text-on-surface-variant font-medium leading-none mt-0.5">${unit}</span>
+    </div>
+    <button data-action="adj" data-path="${path}" data-delta="${step}" data-min="${min}" class="w-8 min-h-[44px] flex items-center justify-center text-on-surface-variant active:bg-surface-container flex-shrink-0" type="button">${icon('add','text-[16px]')}</button>
+  </div>`;
+}
+
+function intensityPillGroup(basePath, obj, opts={}) {
+  const side = opts.side || '';
+  const compact = !!opts.compact;
+  const methodKey = 'intensityMethod' + side, valueKey = 'intensityValue' + side;
+  const method = obj[methodKey] || 'rpe';
+  const values = method === 'rir' ? [3,2,1,0] : [7,8,9,10];
+  const wrapCls = compact ? 'mt-2 p-1.5' : 'mt-2.5 p-2';
+  const pillCls = compact ? 'min-h-[32px] px-2 py-0.5 font-label-sm text-label-sm' : 'min-h-[36px] px-3 py-1 font-label-md text-label-md';
+  return `
+  <div class="${wrapCls} bg-surface-container-lowest/80 rounded-lg flex items-center gap-1 overflow-x-auto no-scrollbar">
+    <button data-action="set-intensity-method" data-base-path="${basePath}" data-key="${methodKey}" data-value-key="${valueKey}" data-method="${method==='rpe'?'rir':'rpe'}" class="font-label-sm text-label-sm text-on-surface-variant font-bold pr-1 flex-shrink-0 underline decoration-dotted" type="button">${method.toUpperCase()}:</button>
+    <div class="flex items-center gap-1.5 flex-1 justify-end flex-wrap">
+      ${values.map(v => `<button data-action="set-intensity-value" data-base-path="${basePath}" data-key="${valueKey}" data-method-key="${methodKey}" data-method="${method}" data-value="${v}" class="${pillCls} rounded-full font-semibold flex-shrink-0 ${obj[valueKey]===v?'bg-primary text-on-primary font-bold shadow-sm':'bg-surface-container text-on-surface'}" type="button">${v}</button>`).join('')}
+      <button data-action="set-intensity-value" data-base-path="${basePath}" data-key="${valueKey}" data-method-key="${methodKey}" data-method="failure" data-value="failure" class="${pillCls} rounded-full font-bold flex-shrink-0 ${obj[valueKey]==='failure'?'bg-tertiary text-on-tertiary':'bg-surface-container text-tertiary'}" type="button">FAIL</button>
+    </div>
+  </div>`;
+}
+
+function renderEditableWorkingSet(exIdx, setIdx, set, ex) {
+  const base = `activeSession.exercises.${exIdx}.sets.${setIdx}`;
+  const label = set.type === 'warmup' ? 'WARM' : 'WORK';
+  const bg = hasSetData(set) ? 'bg-primary-fixed/20' : 'bg-surface-container-low';
+  const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+  const body = ex.laterality === 'unilateral' ? `
+    <div class="${bg} rounded-xl p-3 mb-3 transition-all">
+      <button data-action="set-cycle-type" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="flex items-center gap-2 mb-2" type="button">
+        <span class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-title-md text-title-md font-bold">${setIdx+1}</span>
+        <span class="font-label-md text-label-md font-bold text-on-surface">${label} Set</span>
+      </button>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="bg-surface-container-lowest rounded-xl p-2.5 shadow-sm flex flex-col gap-1.5">
+          <span class="px-2 py-0.5 bg-surface-container text-on-surface font-label-sm text-label-sm rounded-full font-bold self-start">LEFT</span>
+          ${stepperField(`${base}.weightLeft`, set.weightLeft, unit, 1, 0)}
+          ${stepperField(`${base}.repsLeft`, set.repsLeft, 'reps', 1, 0)}
+          ${intensityPillGroup(base, set, {side:'Left', compact:true})}
+        </div>
+        <div class="bg-surface-container-lowest rounded-xl p-2.5 shadow-sm flex flex-col gap-1.5">
+          <span class="px-2 py-0.5 bg-surface-container text-on-surface font-label-sm text-label-sm rounded-full font-bold self-start">RIGHT</span>
+          ${stepperField(`${base}.weightRight`, set.weightRight, unit, 1, 0)}
+          ${stepperField(`${base}.repsRight`, set.repsRight, 'reps', 1, 0)}
+          ${intensityPillGroup(base, set, {side:'Right', compact:true})}
+        </div>
+      </div>
+    </div>` : `
+    <div class="${bg} rounded-xl p-2.5 mb-2.5 transition-all">
+      <div class="flex items-center gap-2">
+        <button data-action="set-cycle-type" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="w-10 flex-shrink-0 flex flex-col items-center justify-center" type="button">
+          <span class="w-8 h-8 rounded-full bg-surface-container text-on-surface flex items-center justify-center font-title-md text-title-md font-bold">${setIdx+1}</span>
+          <span class="font-label-sm text-[10px] text-on-surface-variant font-semibold mt-0.5">${label}</span>
+        </button>
+        <div class="flex-1 min-w-0">${stepperField(`${base}.weight`, set.weight, unit, ex.loadType==='per_side'?1:2.5, 0)}</div>
+        <div class="flex-1 min-w-0">${stepperField(`${base}.reps`, set.reps, 'reps', 1, 0)}</div>
+      </div>
+      ${intensityPillGroup(base, set)}
+      <div class="mt-2 flex items-center justify-end">
+        <button data-action="remove-set" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" aria-label="Remove set" class="h-9 px-3 rounded-full flex items-center gap-1 text-on-surface-variant hover:bg-surface-container-lowest flex-shrink-0" type="button">${icon('close','text-[16px]')}<span class="font-label-sm text-label-sm">Remove set</span></button>
+      </div>
+    </div>`;
+  const drops = (set.drops||[]).length ? `
+    <div class="relative pl-6 ml-4 my-2 flex flex-col gap-2">
+      <div class="absolute left-1 top-0 bottom-4 w-1 bg-tertiary-fixed rounded-full"></div>
+      ${set.drops.map((d, di) => renderEditableDrop(exIdx, setIdx, di, d, ex)).join('')}
+    </div>` : '';
+  return body + drops;
+}
+
+function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex) {
+  const base = `activeSession.exercises.${exIdx}.sets.${setIdx}.drops.${dropIdx}`;
+  const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+  const isUni = ex.laterality === 'unilateral';
+  return `
+  <div class="relative bg-surface-container-high/60 rounded-xl p-2.5">
+    <span class="absolute -left-5 top-4 font-bold text-tertiary text-[18px]">↳</span>
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="px-2 py-0.5 bg-tertiary text-on-tertiary font-label-sm text-label-sm rounded-full font-extrabold uppercase">DROP ${dropIdx+1}</span>
+      <button data-action="remove-drop" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" data-drop-idx="${dropIdx}" class="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant" type="button">${icon('close','text-[14px]')}</button>
+    </div>
+    ${isUni ? `
+    <div class="grid grid-cols-2 gap-2">
+      <div class="flex flex-col gap-1.5">
+        <span class="font-label-sm text-label-sm text-on-surface-variant font-bold">LEFT</span>
+        ${stepperField(`${base}.weightLeft`, drop.weightLeft, unit, 1, 0)}
+        ${stepperField(`${base}.repsLeft`, drop.repsLeft, 'reps', 1, 0)}
+        ${intensityPillGroup(base, drop, {side:'Left', compact:true})}
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <span class="font-label-sm text-label-sm text-on-surface-variant font-bold">RIGHT</span>
+        ${stepperField(`${base}.weightRight`, drop.weightRight, unit, 1, 0)}
+        ${stepperField(`${base}.repsRight`, drop.repsRight, 'reps', 1, 0)}
+        ${intensityPillGroup(base, drop, {side:'Right', compact:true})}
+      </div>
+    </div>` : `
+    <div class="flex items-center gap-2">
+      <div class="flex-1 min-w-0">${stepperField(`${base}.weight`, drop.weight, unit, ex.loadType==='per_side'?1:2.5, 0)}</div>
+      <div class="flex-1 min-w-0">${stepperField(`${base}.reps`, drop.reps, 'reps', 1, 0)}</div>
+    </div>
+    ${intensityPillGroup(base, drop)}`}
+  </div>`;
+}
+
+/* ================= SESSION DETAIL / SUMMARY (read-only) ================= */
+/* ---- shared glanceable table (Workout | Weight | Reps | Notes) for history/summary review ---- */
+function tableHeaderRow() {
+  return `<div class="grid grid-cols-[2fr_0.9fr_0.9fr_0.9fr] gap-3 px-3 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+    <div>Workout</div><div class="text-right">Weight</div><div class="text-right">Reps</div><div class="text-right">RPE</div>
+  </div>`;
+}
+function intensityBadgeHtml(set, isUni) {
+  const label = isUni ? intensityLabelSides(set) : intensityLabel(set);
+  if (!label) return '';
+  const isFail = isUni ? (set.intensityValueLeft==='failure'||set.intensityValueRight==='failure') : set.intensityValue === 'failure';
+  return `<span class="font-bold ${isFail ? 'text-tertiary' : 'text-on-surface'}">${label}</span>`;
+}
+function tableDataRow({ label, labelSub, badge, weight, weightUnit, reps, noteBadge, dim, href }) {
+  const Tag = href ? 'a' : 'div';
+  return `<${Tag} ${href ? `href="${href}"` : ''} class="grid grid-cols-[2fr_0.9fr_0.9fr_0.9fr] gap-3 px-3 py-2.5 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
+    <div class="min-w-0">
+      <div class="flex items-center gap-1 flex-wrap">
+        <span class="font-label-md text-label-md text-on-surface">${label}</span>
+        ${badge || ''}
+      </div>
+      ${labelSub ? `<span class="block font-label-sm text-label-sm text-on-surface-variant">${labelSub}</span>` : ''}
+    </div>
+    <div class="font-numeric-metric text-numeric-metric text-on-surface whitespace-nowrap text-right">${weight != null ? weight : '–'}${(weight != null && weightUnit) ? `<span class="text-label-sm font-body-md text-on-surface-variant ml-0.5">${weightUnit}</span>` : ''}</div>
+    <div class="min-w-0 text-right"><span class="font-body-md text-body-md text-on-surface">${reps}</span></div>
+    <div class="font-label-sm text-label-sm text-on-surface-variant min-w-0 text-right">${noteBadge || '–'}</div>
+  </${Tag}>`;
+}
+function tableGroupHeader(name, badge) {
+  return `<div class="px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low/50 flex items-center gap-1.5">
+    <span class="font-label-lg text-label-lg text-on-surface font-bold">${name}</span>
+    ${badge || ''}
+  </div>`;
+}
+function tableWrap(rowsHtml) {
+  return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <div class="min-w-[420px]">
+        ${tableHeaderRow()}
+        ${rowsHtml}
+      </div>
+    </div>
+  </div>`;
+}
+function renderSessionTable(session) {
+  const groups = [];
+  for (const ex of session.exercises) {
+    const flat = session_flatSets(ex).filter(x => hasSetData(x.set));
+    if (!flat.length) continue;
+    const pr = isPR(ex.exerciseId, topWorkingSet(ex), session.date);
+    const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+    let workingIdx = 0;
+    const isUni = ex.laterality === 'unilateral';
+    const rows = flat.map(({ set, isDrop }) => {
+      if (!isDrop) workingIdx++;
+      const reps = isUni ? `L${set.repsLeft ?? '–'}/R${set.repsRight ?? '–'}` : `${set.reps ?? '–'}`;
+      return tableDataRow({
+        label: isDrop ? '↳ Drop' : `Set ${workingIdx}`,
+        labelSub: (!isDrop && set.type === 'warmup') ? 'Warm-up' : null,
+        weight: isUni ? `L${set.weightLeft ?? '–'}/R${set.weightRight ?? '–'}` : set.weight,
+        weightUnit: isUni ? null : unit, reps, noteBadge: intensityBadgeHtml(set, isUni), dim: isDrop,
+      });
+    }).join('');
+    groups.push(tableGroupHeader(esc(ex.nameSnapshot), pr ? pill('PR', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : '') + rows);
+  }
+  if (!groups.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No sets were logged for this session.</p>`;
+  return tableWrap(groups.join(''));
+}
+
+function renderSessionDetail(sessionId, isSummary) {
+  const s = state.workoutSessions.find(w => w.id === sessionId);
+  if (!s) return `<p class="text-on-surface-variant pt-8">Session not found.</p>`;
+  const stats = sessionStats(s);
+  const comparisons = [];
+  for (const ex of s.exercises) {
+    const top = topWorkingSet(ex);
+    const prev = findPreviousExerciseBlock(ex.exerciseId, s.date, s.id);
+    const cmp = prev ? compareTopSetFull(topWorkingSet(prev.block), top) : null;
+    if (cmp) comparisons.push({ name: ex.nameSnapshot, ...cmp });
+  }
+  const backHref = isSummary ? '#/home' : '#/history';
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-space-md">
+    <a href="${backHref}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">${isSummary?'Workout Complete':esc(s.sequenceName)}</h2>
+  </div>
+
+  ${isSummary ? `
+  <div class="bg-primary rounded-2xl p-space-lg text-on-primary shadow-sm flex flex-col items-center text-center gap-1 mb-space-md">
+    ${icon('celebration','text-[32px]')}
+    <h3 class="font-headline-lg text-headline-lg font-bold">${esc(s.sequenceName)}</h3>
+    <p class="font-body-md text-body-md opacity-90">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</p>
+  </div>` : `<p class="font-label-sm text-label-sm text-on-surface-variant -mt-2 mb-space-md">${fmtFull(s.date)} • Logged by ${esc(roleName(s.performedBy))}</p>`}
+
+  <div class="grid grid-cols-4 gap-2 mb-space-md">
+    ${[['Exercises', stats.exercisesDone+'/'+stats.exercisesTotal],['Working sets', stats.workingSets],['Drop sets', stats.dropSets],['Total reps', stats.totalReps]].map(([label,val])=>`
+      <div class="bg-surface-container-lowest rounded-xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center">
+        <span class="font-numeric-metric text-numeric-metric text-on-surface">${val}</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">${label}</span>
+      </div>`).join('')}
+  </div>
+
+  ${comparisons.length ? `
+  <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-space-md">
+    <div class="flex items-center gap-2 mb-2">${icon('insights','text-[20px] text-on-surface-variant')}<h4 class="font-title-md text-title-md text-on-surface">${state.role===s.performedBy ? 'Your' : esc(roleName(s.performedBy)) + "'s"} Progress</h4></div>
+    <div class="flex flex-col gap-1.5">
+      ${comparisons.map(c=>`<p class="font-body-md text-body-md text-on-surface-variant flex items-start gap-1.5"><span class="${c.dir==='up'?'text-primary':'text-on-surface-variant'} flex-shrink-0 mt-0.5">${icon(c.dir==='up'?'trending_up':c.dir==='down'?'trending_down':'trending_flat','text-[16px]')}</span><span><span class="text-on-surface font-semibold">${esc(c.name)}:</span> ${esc(c.text)}</span></p>`).join('')}
+    </div>
+  </div>` : ''}
+
+  ${state.role==='trainer' && !s.reviewedByTrainer ? `
+  <div class="mb-space-md">
+    <button data-action="mark-reviewed" data-id="${s.id}" class="w-full h-11 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Mark Reviewed</button>
+  </div>` : ''}
+
+  ${renderSessionTable(s)}
+
+  ${isSummary ? `<a href="#/home" class="block text-center mt-space-lg h-12 leading-[48px] rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg">Back to Home</a>` : ''}
+  `;
+}
+
+/* ================= HISTORY ================= */
+function renderHistory() {
+  const tab = state.ui.historyTab;
+  return `
+  <div class="flex items-center justify-between pt-2 mb-space-md">
+    <h2 class="font-headline-lg text-headline-lg text-on-surface">History</h2>
+  </div>
+  <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm mb-space-md w-fit">
+    <button data-action="history-tab" data-tab="sessions" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='sessions'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Sessions</button>
+    <button data-action="history-tab" data-tab="exercises" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='exercises'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Exercises</button>
+  </div>
+  ${tab==='sessions' ? renderHistorySessions() : renderHistoryExercisePicker()}
+  `;
+}
+
+function historyMonths() { return [...new Set(completedSessionsSorted().map(s => monthKey(s.date)))]; }
+function renderHistorySessions() {
+  const allSessions = completedSessionsSorted();
+  const months = historyMonths();
+  /* tolerate a missing/invalid saved filter (e.g. from an older app version) instead of crashing */
+  const filterMonth = (state.ui.historyFilterMonth === 'all' || months.includes(state.ui.historyFilterMonth)) ? state.ui.historyFilterMonth : 'all';
+  const list = allSessions.filter(s => filterMonth==='all' || monthKey(s.date)===filterMonth);
+  const idx = months.indexOf(filterMonth);
+  const canPrev = filterMonth !== 'all' && idx < months.length - 1;
+  const canNext = filterMonth !== 'all' && idx > 0;
+  return `
+  <div class="flex items-center justify-center gap-3 mb-space-md">
+    <button data-action="history-month-prev" ${canPrev?'':'disabled'} aria-label="Older month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_left','text-[20px]')}</button>
+    <button data-action="history-month-toggle" class="h-9 px-4 rounded-full bg-surface-container text-on-surface font-label-md text-label-md font-semibold min-w-[130px] text-center" type="button">${filterMonth==='all' ? 'All Months' : monthLabel(filterMonth)}</button>
+    <button data-action="history-month-next" ${canNext?'':'disabled'} aria-label="Newer month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_right','text-[20px]')}</button>
+  </div>
+  <div class="flex flex-col gap-space-sm">
+    ${list.map(s => {
+      const stats = sessionStats(s);
+      return `
+      <button data-action="go" data-href="#/history/session/${s.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-2" type="button">
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)}</span>
+            <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+            <span class="font-label-sm text-label-sm ${s.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${s.reviewedByTrainer?'Reviewed':'Pending review'}</span>
+          </div>
+          <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
+          <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(s.durationSeconds)} • ${stats.workingSets+stats.dropSets} sets • Logged by ${esc(roleName(s.performedBy))}</span>
+        </div>
+        ${icon('chevron_right','text-[20px] text-on-surface-variant flex-shrink-0')}
+      </button>`;
+    }).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No sessions yet.</p>`}
+  </div>`;
+}
+
+function renderHistoryExercisePicker() {
+  if (!state.exercises.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No exercises yet — add some from the Library.</p>`;
+  const selected = state.ui.historyFilterExercise && state.exercises.some(e=>e.id===state.ui.historyFilterExercise) ? state.ui.historyFilterExercise : state.exercises[0].id;
+  return `
+  <select data-action-change="history-filter-ex" class="w-full h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40 mb-space-md">
+    ${state.exercises.map(e=>`<option value="${e.id}" ${selected===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+  </select>
+  ${renderExerciseHistoryBody(selected)}
+  `;
+}
+
+function renderExerciseHistory(exerciseId) {
+  state.ui.historyFilterExercise = exerciseId;
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-space-md">
+    <a href="#/history" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1 truncate">${esc(getExercise(exerciseId).name)}</h2>
+  </div>
+  ${renderExerciseHistoryBody(exerciseId)}
+  `;
+}
+
+const PROGRESS_GRID_COLS = 'grid-cols-[1.2fr_1fr_0.9fr_1fr]';
+function progressDelta(delta, unit) {
+  if (delta == null || isNaN(delta) || delta === 0) return `<span class="block font-label-sm text-label-sm text-on-surface-variant">–</span>`;
+  const good = delta > 0;
+  return `<span class="block font-label-sm text-label-sm font-bold ${good ? 'text-primary' : 'text-on-surface-variant'}">${good ? '+' : ''}${delta}${unit || ''}</span>`;
+}
+function sideDeltaHtml(currL, prevL, currR, prevR) {
+  const lD = (currL != null && prevL != null) ? round1(currL - prevL) : null;
+  const rD = (currR != null && prevR != null) ? round1(currR - prevR) : null;
+  if (lD == null && rD == null) return `<span class="block font-label-sm text-label-sm text-on-surface-variant">–</span>`;
+  const fmt = (d) => d == null ? '–' : (d > 0 ? `+${d}` : `${d}`);
+  const cls = (d) => (d != null && d > 0) ? 'text-primary font-bold' : 'text-on-surface-variant';
+  return `<span class="block font-label-sm text-label-sm"><span class="${cls(lD)}">${fmt(lD)}</span> / <span class="${cls(rD)}">${fmt(rD)}</span></span>`;
+}
+function renderExerciseHistoryBody(exerciseId) {
+  const ex = getExercise(exerciseId);
+  const sessions = completedSessionsSorted().filter(s => s.exercises.some(e => e.exerciseId === exerciseId));
+  if (!sessions.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No logged history for this exercise yet.</p>`;
+  const chronoAsc = [...sessions].reverse();
+  const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+
+  const rows = sessions.map((s) => {
+    const block = s.exercises.find(e => e.exerciseId === exerciseId);
+    const flat = session_flatSets(block).filter(x => hasSetData(x.set));
+    if (!flat.length) return '';
+    const topRaw = topWorkingSet(block);
+    const top = (topRaw && hasSetData(topRaw)) ? topRaw : flat[0].set;
+
+    const ascIdx = chronoAsc.indexOf(s);
+    const prevSession = ascIdx > 0 ? chronoAsc[ascIdx - 1] : null;
+    const prevBlock = prevSession ? prevSession.exercises.find(e => e.exerciseId === exerciseId) : null;
+    const prevTop = prevBlock ? topWorkingSet(prevBlock) : null;
+
+    const isUni = ex.laterality === 'unilateral';
+    const reps = isUni ? `L${top.repsLeft ?? '–'}/R${top.repsRight ?? '–'}` : `${top.reps ?? '–'}`;
+    const weightDisplay = isUni ? `L${top.weightLeft ?? '–'}/R${top.weightRight ?? '–'}` : (top.weight ?? '–');
+    const repsNum = repsOf(top), prevRepsNum = prevTop ? repsOf(prevTop) : null;
+    const topW = weightOf(top), prevW = prevTop ? weightOf(prevTop) : null;
+    const weightDelta = (prevTop && prevW != null && topW != null) ? round1(topW - prevW) : null;
+    const repsDelta = (prevTop && prevRepsNum != null && repsNum != null) ? round1(repsNum - prevRepsNum) : null;
+    const repsDeltaHtml = isUni && prevTop
+      ? sideDeltaHtml(top.repsLeft, prevTop.repsLeft, top.repsRight, prevTop.repsRight)
+      : progressDelta(repsDelta, '');
+    const weightDeltaHtml = isUni && prevTop
+      ? sideDeltaHtml(top.weightLeft, prevTop.weightLeft, top.weightRight, prevTop.weightRight)
+      : progressDelta(weightDelta, unit);
+    const rpeNow = intensityNum(top), rpePrev = prevTop ? intensityNum(prevTop) : null;
+    const rpeDelta = (rpeNow != null && rpePrev != null) ? round1(rpeNow - rpePrev) : null;
+    const rpeIsEasier = weightDelta === 0 && repsDelta === 0 && rpeDelta != null && rpeDelta < 0;
+    const rpeDeltaHtml = isUni && prevTop
+      ? sideDeltaHtml(intensityNum(top,'Left'), intensityNum(prevTop,'Left'), intensityNum(top,'Right'), intensityNum(prevTop,'Right'))
+      : (rpeDelta != null && rpeDelta !== 0 ? `<span class="block font-label-sm text-label-sm ${rpeIsEasier?'text-primary font-bold':'text-on-surface-variant'}">${rpeDelta>0?'+':''}${rpeDelta}${rpeIsEasier?' (easier)':''}</span>` : `<span class="block font-label-sm text-label-sm text-on-surface-variant">–</span>`);
+
+    const pr = isPR(exerciseId, top, s.date);
+    const extra = flat.length - 1;
+    const expanded = state.ui.expandedHistorySessionId === s.id;
+
+    return `
+    <button data-action="toggle-history-row" data-id="${s.id}" type="button" class="w-full grid ${PROGRESS_GRID_COLS} gap-2 px-3 py-3 border-t border-outline-variant/20 items-center hover:bg-surface-container-low/60 transition-colors text-left">
+      <div class="min-w-0 flex items-center gap-1">
+        ${icon(expanded?'expand_less':'expand_more','text-[18px] text-on-surface-variant flex-shrink-0')}
+        <span class="min-w-0">
+          <span class="font-label-md text-label-md text-on-surface font-semibold block">${fmtShort(s.date)}</span>
+          ${extra > 0 ? `<span class="font-label-sm text-label-sm text-on-surface-variant">+${extra} more set${extra > 1 ? 's' : ''}</span>` : ''}
+        </span>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-baseline gap-1 flex-wrap">
+          <span class="font-numeric-metric text-numeric-metric text-on-surface">${weightDisplay}</span>${!isUni ? `<span class="font-label-sm text-label-sm text-on-surface-variant">${unit}</span>` : ''}
+          ${pr ? pill('PR', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
+        </div>
+        ${weightDeltaHtml}
+      </div>
+      <div class="min-w-0">
+        <span class="font-numeric-metric text-numeric-metric text-on-surface">${reps}</span>
+        ${repsDeltaHtml}
+      </div>
+      <div class="min-w-0">
+        <span class="font-label-md text-label-md font-bold ${(isUni ? (top.intensityValueLeft==='failure'||top.intensityValueRight==='failure') : top.intensityValue==='failure')?'text-tertiary':'text-on-surface'}">${(isUni ? intensityLabelSides(top) : intensityLabel(top)) || '–'}</span>
+        ${rpeDeltaHtml}
+      </div>
+    </button>
+    ${expanded ? `
+    <div class="px-3 pb-3 pt-1 border-t border-outline-variant/10 bg-surface-container-low/30">
+      <div class="flex flex-col divide-y divide-outline-variant/20">
+        ${prevSetRows(block)}
+      </div>
+      <a href="#/history/session/${s.id}" class="inline-flex items-center gap-1 mt-2 font-label-sm text-label-sm text-primary font-semibold">View full session${icon('arrow_forward','text-[14px]')}</a>
+    </div>` : ''}`;
+  }).join('');
+
+  return `
+  <div class="bg-surface-container-low rounded-xl p-3 mb-space-md flex items-center gap-3">
+    <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(ex.category)} • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(ex.loadType)}</span>
+  </div>
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+    <div class="grid ${PROGRESS_GRID_COLS} gap-2 px-3 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+      <div>Date</div><div>Weight</div><div>Reps</div><div>RPE</div>
+    </div>
+    ${rows || `<p class="font-body-md text-body-md text-on-surface-variant p-4">No completed sets logged yet.</p>`}
+  </div>
+  <p class="font-label-sm text-label-sm text-on-surface-variant mt-2 px-1">Showing the top working set per workout. Tap a row for the full log, including drop sets.</p>
+  `;
+}
+
+/* ================= ADMIN CENTER ================= */
+let adminLoading = false;
+async function loadAdminCenterData() {
+  if (adminLoading) return;
+  adminLoading = true;
+  try {
+    const wlSnap = await get(ref(db, 'whitelist'));
+    const wl = Object.values(wlSnap.val() || {});
+    const traineesByTrainer = {};
+    for (const w of wl) {
+      if (w.role === 'trainer' && w.uid) {
+        const idxSnap = await get(ref(db, `trainerIndex/${w.uid}`));
+        const traineeUids = Object.keys(idxSnap.val() || {});
+        traineesByTrainer[w.uid] = traineeUids.map(tUid => {
+          const entry = wl.find(x => x.uid === tUid);
+          return { uid: tUid, name: entry ? entry.email : tUid };
+        });
+      }
+    }
+    state.ui.adminWhitelist = wl;
+    state.ui.adminTraineesByTrainer = traineesByTrainer;
+    state.ui.adminLoaded = true;
+    state.ui.adminLoadError = null;
+  } catch (e) {
+    console.error('Failed to load admin center data', e);
+    state.ui.adminLoadError = e.message || 'Failed to load';
+  }
+  adminLoading = false;
+  rerender();
+}
+function renderAdminCenter() {
+  if (!state.isAdmin) return `<p class="font-body-md text-body-md text-on-surface-variant pt-8">Not authorized.</p>`;
+  const wl = state.ui.adminWhitelist || [];
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-space-md">
+    <a href="#/home" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">Admin Center</h2>
+    <button data-action="open-admin-add-user" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>
+  </div>
+  ${state.ui.adminLoadError ? `
+    <div class="flex flex-col gap-space-sm items-start">
+      <p class="font-body-md text-body-md text-error">Couldn't load Admin Center: ${esc(state.ui.adminLoadError)}</p>
+      <button data-action="retry-admin-load" class="h-10 px-4 rounded-full bg-secondary-container text-on-secondary-container font-label-lg text-label-lg" type="button">Retry</button>
+    </div>` :
+  !state.ui.adminLoaded ? `<p class="font-body-md text-body-md text-on-surface-variant">Loading…</p>` :
+    `<div class="flex flex-col gap-space-sm">
+      ${wl.length ? wl.map(w => adminUserRow(w)).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No users whitelisted yet. Tap + to add one.</p>`}
+    </div>`}
+  `;
+}
+function adminUserRow(w) {
+  const signedIn = !!w.uid;
+  const trainees = w.role === 'trainer' ? ((state.ui.adminTraineesByTrainer||{})[w.uid] || []) : [];
+  return `
+  <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
+    <div class="flex items-center justify-between gap-2">
+      <div class="min-w-0">
+        <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(w.email)}</h4>
+        <p class="font-label-sm text-label-sm text-on-surface-variant">${w.role==='trainer'?'Trainer':'Trainee'}${signedIn?'':' • hasn’t signed in yet'}</p>
+      </div>
+      ${w.role==='trainer' && signedIn ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid}" data-trainer-email="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 flex-shrink-0" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
+      ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 flex-shrink-0" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
+    </div>
+    ${trainees.length ? `<div class="flex flex-wrap gap-1.5">${trainees.map(t=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(t.name)}</span>`).join('')}</div>` : ''}
+  </div>`;
+}
+function modalAdminAddUser(m) {
+  return modalShell('Whitelist a User', `
+    <label class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">Email</span>
+      <input id="f-admin-email" type="email" placeholder="name@gmail.com" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="font-label-md text-label-md text-on-surface-variant">Role</span>
+      <select id="f-admin-role" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+        <option value="trainee">Trainee</option>
+        <option value="trainer">Trainer</option>
+      </select>
+    </label>
+  `, `<button data-action="admin-add-user-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Whitelist</button>`);
+}
+function modalAdminAssign(m) {
+  const trainees = (state.ui.adminWhitelist||[]).filter(w => w.role === 'trainee' && w.uid);
+  const current = new Set(((state.ui.adminTraineesByTrainer||{})[m.trainerUid]||[]).map(t=>t.uid));
+  return modalShell(`Assign trainees to ${esc(m.trainerEmail)}`, `
+    <div class="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
+      ${trainees.length ? trainees.map(t => `
+        <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-surface-container-low">
+          <input type="checkbox" data-admin-trainee-uid="${t.uid}" ${current.has(t.uid)?'checked':''} class="w-5 h-5">
+          <span class="font-label-lg text-label-lg text-on-surface">${esc(t.email)}</span>
+        </label>`).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No trainees have signed in yet — ask them to sign in once, then come back here.</p>`}
+    </div>
+  `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
+}
+
+/* ================= FOCUS-PRESERVING RE-RENDER ================= */
+function captureFocus() {
+  const a = document.activeElement;
+  if (!a || !(a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return null;
+  let attr, key;
+  if (a.hasAttribute('data-bind')) { attr = 'data-bind'; key = a.getAttribute('data-bind'); }
+  else if (a.hasAttribute('data-action-input')) { attr = 'data-action-input'; key = a.getAttribute('data-action-input'); }
+  else if (a.id) { attr = 'id'; key = a.id; }
+  else return null;
+  let selStart, selEnd;
+  try { selStart = a.selectionStart; selEnd = a.selectionEnd; } catch (e) {}
+  return { attr, key, selStart, selEnd };
+}
+function restoreFocus(info) {
+  if (!info) return;
+  const el = info.attr === 'id' ? document.getElementById(info.key) : document.querySelector(`[${info.attr}="${info.key.replace(/"/g,'\\"')}"]`);
+  if (!el) return;
+  el.focus();
+  if (info.selStart != null) { try { el.setSelectionRange(info.selStart, info.selEnd); } catch (e) {} }
+}
+function rerender() { const f = captureFocus(); render(); restoreFocus(f); }
+
+/* ================= ACTIONS ================= */
+const actions = {
+  'go': (ds) => navigate(ds.href),
+  'toggle-profile-menu': () => { state.ui.profileMenuOpen = !state.ui.profileMenuOpen; rerender(); },
+  'switch-trainee': (ds) => {
+    state.role = 'trainer'; state.ui.profileMenuOpen = false;
+    setViewingTrainee(ds.uid, ds.name);
+    navigate('#/home'); rerender();
+  },
+  'toggle-theme': () => {
+    state.ui.theme = state.ui.theme === 'dark' ? 'light' : 'dark'; state.ui.profileMenuOpen = false;
+    try { localStorage.setItem('n1_theme', state.ui.theme); } catch(e) {}
+    applyTheme(); rerender();
+  },
+  'sign-in': () => { signInWithPopup(fbAuth, googleProvider).catch(e => alert('Sign-in error: ' + e.message)); },
+  'sign-out': () => { state.ui.profileMenuOpen = false; signOut(fbAuth); },
+  'open-admin-add-user': () => { state.ui.modal = { type: 'admin-add-user' }; rerender(); },
+  'admin-add-user-confirm': async () => {
+    const email = ($('#f-admin-email').value || '').trim().toLowerCase();
+    const role = $('#f-admin-role').value;
+    if (!email) return;
+    const ek = emailKey(email);
+    await set(ref(db, `whitelist/${ek}`), { email, role, addedByUid: state.authUser.uid, addedAt: Date.now() });
+    state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
+    loadAdminCenterData();
+  },
+  'open-admin-assign': (ds) => { state.ui.modal = { type: 'admin-assign', trainerUid: ds.trainerUid, trainerEmail: ds.trainerEmail }; rerender(); },
+  'admin-assign-confirm': async (ds) => {
+    const trainerUid = ds.trainerUid;
+    const boxes = $all('input[data-admin-trainee-uid]');
+    const updates = {};
+    boxes.forEach(el => {
+      const tUid = el.dataset.adminTraineeUid;
+      updates[`trainerIndex/${trainerUid}/${tUid}`] = el.checked ? true : null;
+      updates[`traineeIndex/${tUid}/${trainerUid}`] = el.checked ? true : null;
+    });
+    await update(ref(db), updates);
+    state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
+    loadAdminCenterData();
+  },
+  'retry-admin-load': () => { state.ui.adminLoadError = null; rerender(); loadAdminCenterData(); },
+  'admin-view-as': (ds) => {
+    state.role = 'client'; state.ui.profileMenuOpen = false;
+    setViewingTrainee(ds.uid, ds.name);
+    navigate('#/home'); rerender();
+  },
+  'close-modal': () => { state.ui.modal = null; rerender(); },
+
+  'cal-prev-month': () => { let m = state.ui.calMonth - 1, y = state.ui.calYear; if (m < 0) { m = 11; y--; } state.ui.calMonth = m; state.ui.calYear = y; rerender(); },
+  'cal-next-month': () => { let m = state.ui.calMonth + 1, y = state.ui.calYear; if (m > 11) { m = 0; y++; } state.ui.calMonth = m; state.ui.calYear = y; rerender(); },
+  'cal-select-day': (ds) => { state.ui.calSelectedDate = ds.date; rerender(); },
+  'cal-view': (ds) => { state.ui.calView = ds.view; rerender(); },
+  'open-schedule-modal': () => {
+    const first = state.sequences.find(s=>!s.archived && !s.draft);
+    const d = new Date(state.ui.calSelectedDate + 'T00:00:00');
+    state.ui.modal = { type: 'schedule', date: state.ui.calSelectedDate, pickerYear: d.getFullYear(), pickerMonth: d.getMonth(), sequenceId: first ? first.id : null, note: '' };
+    rerender();
+  },
+  'open-reschedule': (ds) => {
+    const sc = state.scheduledSessions.find(x => x.id === ds.id);
+    const d = new Date(sc.date + 'T00:00:00');
+    state.ui.modal = { type: 'reschedule', id: ds.id, date: sc.date, pickerYear: d.getFullYear(), pickerMonth: d.getMonth() };
+    rerender();
+  },
+  'picker-prev-month': () => { let mo = state.ui.modal.pickerMonth - 1, y = state.ui.modal.pickerYear; if (mo < 0) { mo = 11; y--; } state.ui.modal.pickerMonth = mo; state.ui.modal.pickerYear = y; rerender(); },
+  'picker-next-month': () => { let mo = state.ui.modal.pickerMonth + 1, y = state.ui.modal.pickerYear; if (mo > 11) { mo = 0; y++; } state.ui.modal.pickerMonth = mo; state.ui.modal.pickerYear = y; rerender(); },
+  'picker-select-day': (ds) => { state.ui.modal.date = ds.date; rerender(); },
+  'open-swap': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); state.ui.modal = { type: 'swap-sequence', id: ds.id, sequenceId: sc.sequenceId }; rerender(); },
+  'open-cancel-scheduled': (ds) => { state.ui.modal = { type: 'cancel-scheduled-confirm', id: ds.id }; rerender(); },
+  'cancel-scheduled-confirm': (ds) => {
+    state.scheduledSessions = state.scheduledSessions.filter(sc => sc.id !== ds.id);
+    state.ui.modal = null; saveState(); rerender();
+  },
+  'schedule-confirm': () => {
+    const date = state.ui.modal.date, sequenceId = $('#f-seq').value;
+    state.scheduledSessions.push({ id: uid('sch'), sequenceId, date, plannedBy: state.role, status: 'planned', note: '' });
+    state.ui.calSelectedDate = date; state.ui.modal = null; saveState(); rerender();
+  },
+  'reschedule-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.date = state.ui.modal.date; state.ui.modal = null; saveState(); rerender(); },
+  'swap-sequence-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.sequenceId = $('#f-seq').value; state.ui.modal = null; saveState(); rerender(); },
+
+  'open-start-picker': () => { state.ui.modal = { type: 'start-workout-pick' }; rerender(); },
+  'start-workout': (ds) => {
+    if (state.activeSession) { state.ui.modal = { type: 'discard-confirm', sequenceId: ds.sequenceId, scheduledId: ds.scheduledId || null }; rerender(); return; }
+    state.ui.modal = null; beginWorkout(ds.sequenceId, ds.scheduledId || null);
+  },
+  'discard-and-start': (ds) => { state.activeSession = null; state.ui.modal = null; beginWorkout(ds.sequenceId, ds.scheduledId || null); },
+  'open-finish': () => { state.ui.modal = { type: 'finish-workout' }; rerender(); },
+  'finish-workout-confirm': () => {
+    if (sessionCustomized(state.activeSession)) { state.ui.modal = { type: 'finish-save-choice' }; rerender(); return; }
+    finalizeActiveSession();
+  },
+  'finish-save-choice-confirm': (ds) => {
+    const s = state.activeSession;
+    if (ds.choice === 'existing') {
+      const seq = getSequence(s.sequenceId);
+      if (seq) seq.exercises = s.exercises.map(sequenceExerciseFromSessionBlock);
+    } else if (ds.choice === 'new') {
+      const seq = getSequence(s.sequenceId);
+      const newSeq = { id: uid('seq'), name: (seq ? seq.name : s.sequenceName) + ' (Updated)', description: seq ? seq.description : '', archived:false, draft:false, createdAt: todayISO(), createdBy: state.role, exercises: s.exercises.map(sequenceExerciseFromSessionBlock) };
+      state.sequences.push(newSeq);
+    }
+    finalizeActiveSession();
+  },
+  'open-cancel-session': () => { state.ui.modal = { type: 'cancel-session-confirm' }; rerender(); },
+  'cancel-session-confirm': () => {
+    state.activeSession = null; state.ui.modal = null; saveState();
+    navigate('#/home');
+  },
+  'use-last-workout': (ds) => {
+    const exIdx = Number(ds.exIdx); const e = state.activeSession.exercises[exIdx];
+    const prev = findPreviousExerciseBlock(e.exerciseId, state.activeSession.date, null);
+    if (!prev) return;
+    prev.block.sets.forEach((pSet, i) => {
+      const cur = e.sets[i]; if (!cur) return;
+      cur.weight = pSet.weight; cur.weightLeft = pSet.weightLeft; cur.weightRight = pSet.weightRight;
+      cur.reps = pSet.reps; cur.repsLeft = pSet.repsLeft; cur.repsRight = pSet.repsRight;
+      cur.intensityMethod = pSet.intensityMethod; cur.intensityValue = pSet.intensityValue;
+      cur.intensityMethodLeft = pSet.intensityMethodLeft; cur.intensityValueLeft = pSet.intensityValueLeft;
+      cur.intensityMethodRight = pSet.intensityMethodRight; cur.intensityValueRight = pSet.intensityValueRight;
+      (pSet.drops || []).forEach((pd, di) => { if (cur.drops[di]) {
+        cur.drops[di].weight = pd.weight; cur.drops[di].weightLeft = pd.weightLeft; cur.drops[di].weightRight = pd.weightRight;
+        cur.drops[di].reps = pd.reps; cur.drops[di].repsLeft = pd.repsLeft; cur.drops[di].repsRight = pd.repsRight;
+        cur.drops[di].intensityMethod = pd.intensityMethod; cur.drops[di].intensityValue = pd.intensityValue;
+        cur.drops[di].intensityMethodLeft = pd.intensityMethodLeft; cur.drops[di].intensityValueLeft = pd.intensityValueLeft;
+        cur.drops[di].intensityMethodRight = pd.intensityMethodRight; cur.drops[di].intensityValueRight = pd.intensityValueRight;
+      } });
+    });
+    saveState(); rerender();
+  },
+  'add-set': (ds) => {
+    const e = state.activeSession.exercises[Number(ds.exIdx)];
+    const last = e.sets[e.sets.length - 1];
+    e.sets.push({ id: uid('set'), type: 'working', weight: last ? last.weight : null, weightLeft: last ? last.weightLeft : null, weightRight: last ? last.weightRight : null, reps: last ? last.reps : null, repsLeft: last ? last.repsLeft : null, repsRight: last ? last.repsRight : null, intensityMethod: last ? last.intensityMethod : 'rpe', intensityValue: null, intensityMethodLeft: last ? last.intensityMethodLeft : 'rpe', intensityValueLeft: null, intensityMethodRight: last ? last.intensityMethodRight : 'rpe', intensityValueRight: null, note: '', completed: false, drops: [] });
+    saveState(); rerender();
+  },
+  'add-drop': (ds) => {
+    const e = state.activeSession.exercises[Number(ds.exIdx)];
+    const setIdx = (ds.setIdx !== undefined && ds.setIdx !== '') ? Number(ds.setIdx) : e.sets.length - 1;
+    if (setIdx < 0) return;
+    const parent = e.sets[setIdx];
+    const lastDrop = parent.drops[parent.drops.length - 1];
+    const scale = (v) => v != null ? round1(v * 0.8) : null;
+    const baseW = lastDrop ? lastDrop.weight : parent.weight;
+    const baseWL = lastDrop ? lastDrop.weightLeft : parent.weightLeft;
+    const baseWR = lastDrop ? lastDrop.weightRight : parent.weightRight;
+    parent.drops.push({ id: uid('set'), type: 'drop', weight: scale(baseW), weightLeft: scale(baseWL), weightRight: scale(baseWR), reps: null, repsLeft: null, repsRight: null, intensityMethod: parent.intensityMethod, intensityValue: null, intensityMethodLeft: parent.intensityMethodLeft, intensityValueLeft: null, intensityMethodRight: parent.intensityMethodRight, intensityValueRight: null, note: '', completed: false });
+    saveState(); rerender();
+  },
+  'remove-set': (ds) => { state.activeSession.exercises[Number(ds.exIdx)].sets.splice(Number(ds.setIdx), 1); saveState(); rerender(); },
+  'remove-drop': (ds) => { state.activeSession.exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)].drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
+  'set-cycle-type': (ds) => { const s = state.activeSession.exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)]; s.type = s.type === 'working' ? 'warmup' : 'working'; saveState(); rerender(); },
+  'adj': (ds) => {
+    const path = ds.path, delta = Number(ds.delta), min = (ds.min !== undefined && ds.min !== '') ? Number(ds.min) : null;
+    let vOld = getPath(state, path); vOld = (vOld == null || vOld === '' || isNaN(Number(vOld))) ? null : Number(vOld);
+    let v = round1((vOld || 0) + delta); if (min != null) v = Math.max(min, v);
+    setPath(state, path, v);
+    saveState(); rerender();
+  },
+  'set-intensity-method': (ds) => { setPath(state, ds.basePath + '.' + (ds.key || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.valueKey || 'intensityValue'), null); saveState(); rerender(); },
+  'set-intensity-value': (ds) => { setPath(state, ds.basePath + '.' + (ds.methodKey || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.key || 'intensityValue'), ds.value === 'failure' ? 'failure' : Number(ds.value)); saveState(); rerender(); },
+
+  'new-sequence': () => { const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] }; state.sequences.push(seq); saveState(); navigate('#/sequences/' + seq.id); },
+  'save-sequence-draft': (ds) => { const seq = getSequence(ds.id); seq.draft = false; saveState(); rerender(); },
+  'duplicate-sequence': (ds) => { const seq = getSequence(ds.id); const copy = clone(seq); copy.id = uid('seq'); copy.name = seq.name + ' (Copy)'; copy.archived = false; copy.exercises.forEach(e => e.id = uid('sqx')); state.sequences.push(copy); saveState(); rerender(); },
+  'archive-toggle': (ds) => { getSequence(ds.id).archived = !getSequence(ds.id).archived; saveState(); rerender(); },
+  'open-delete-sequence': (ds) => { state.ui.modal = { type: 'delete-sequence-confirm', id: ds.id }; rerender(); },
+  'delete-sequence-confirm': (ds) => {
+    state.sequences = state.sequences.filter(s => s.id !== ds.id);
+    state.scheduledSessions = state.scheduledSessions.filter(sc => sc.sequenceId !== ds.id);
+    state.ui.modal = null;
+    saveState();
+    const r = route();
+    if (r.parts[0] === 'sequences' && r.parts[1] === ds.id) navigate('#/sequences'); else rerender();
+  },
+  'draft-nav-save': () => { const href = state.ui.modal.targetHref; state.ui.modal = null; navigate(href); },
+  'draft-nav-discard': () => {
+    const id = state.ui.modal.id, href = state.ui.modal.targetHref;
+    state.sequences = state.sequences.filter(s => s.id !== id);
+    state.scheduledSessions = state.scheduledSessions.filter(sc => sc.sequenceId !== id);
+    state.ui.modal = null;
+    saveState();
+    navigate(href);
+  },
+  'open-rename': (ds) => { state.ui.modal = { type: 'rename-sequence', id: ds.id, name: getSequence(ds.id).name }; rerender(); },
+  'start-inline-rename': (ds) => { state.ui.inlineRenameSeqId = ds.id; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
+  'cancel-inline-rename': () => { state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
+  'confirm-inline-rename': (ds) => {
+    const input = document.getElementById('f-inline-rename-' + ds.id);
+    const name = input ? input.value.trim() : '';
+    if (!name) { state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); return; }
+    if (sequenceNameTaken(name, ds.id)) {
+      state.ui.inlineRenameDraft = name;
+      state.ui.inlineRenameError = 'A sequence with this name already exists.';
+      rerender(); return;
+    }
+    getSequence(ds.id).name = name;
+    state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
+  },
+  'rename-sequence-confirm': (ds) => {
+    const name = $('#f-rename').value.trim();
+    if (!name) { state.ui.modal = null; rerender(); return; }
+    if (sequenceNameTaken(name, ds.id)) { state.ui.modal.name = name; state.ui.modal.error = 'A sequence with this name already exists.'; rerender(); return; }
+    getSequence(ds.id).name = name; state.ui.modal = null; saveState(); rerender();
+  },
+  'toggle-seq-ex': (ds) => { const idx = Number(ds.idx); state.ui.expandedSeqExIdx = state.ui.expandedSeqExIdx === idx ? null : idx; rerender(); },
+  'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
+  'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
+  'add-exercise-confirm': (ds) => {
+    const seq = getSequence(ds.seqId), ex = getExercise(ds.exerciseId);
+    seq.exercises.push({ id: uid('sqx'), exerciseId: ex.id, prescription: { sets: 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null, intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '', drops: [] } });
+    state.ui.modal = null; saveState(); rerender();
+  },
+  'open-add-exercise-session': () => { state.ui.modal = { type: 'session-exercise-picker', mode: 'add', q: '' }; rerender(); },
+  'open-swap-exercise-session': (ds) => { state.ui.modal = { type: 'session-exercise-picker', mode: 'swap', exIdx: Number(ds.exIdx), q: '' }; rerender(); },
+  'session-exercise-pick-confirm': (ds) => {
+    const block = buildSessionExercise(ds.exerciseId, null);
+    if (ds.mode === 'swap') state.activeSession.exercises[Number(ds.exIdx)] = block;
+    else state.activeSession.exercises.push(block);
+    state.ui.modal = null; saveState(); rerender();
+  },
+  'open-new-exercise': (ds) => {
+    const prev = state.ui.modal;
+    state.ui.modal = { type: 'new-exercise', seqId: ds.seqId || (prev && prev.seqId) || '',
+      mode: ds.mode || (prev && prev.mode) || '', exIdx: (ds.exIdx !== undefined && ds.exIdx !== '') ? ds.exIdx : (prev && prev.exIdx) };
+    rerender();
+  },
+  'new-exercise-save': (ds) => {
+    const name = $('#nf-name').value.trim(); if (!name) return;
+    const ex = { id: uid('ex'), name, category: $('#nf-category').value, equipment: $('#nf-equipment').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, notes: '', custom: true };
+    state.exercises.push(ex);
+    if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, null)); }
+    else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, null); }
+    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push({ id: uid('sqx'), exerciseId: ex.id, prescription: { sets: 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null, intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '', drops: [] } }); }
+    state.ui.modal = null; saveState(); rerender();
+  },
+  'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
+  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push({ weight: null, reps: null }); saveState(); rerender(); },
+  'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
+  'move-exercise': (ds) => {
+    const seq = getSequence(ds.seqId), idx = Number(ds.idx), j = idx + Number(ds.dir);
+    if (j < 0 || j >= seq.exercises.length) return;
+    [seq.exercises[idx], seq.exercises[j]] = [seq.exercises[j], seq.exercises[idx]];
+    state.ui.expandedSeqExIdx = j; saveState(); rerender();
+  },
+  'remove-exercise': (ds) => { getSequence(ds.seqId).exercises.splice(Number(ds.idx), 1); state.ui.expandedSeqExIdx = null; saveState(); rerender(); },
+
+  'lib-filter-cat': (ds) => { state.ui.libCategory = ds.cat; rerender(); },
+  'history-tab': (ds) => { state.ui.historyTab = ds.tab; rerender(); },
+  'history-month-toggle': () => {
+    const months = historyMonths();
+    state.ui.historyFilterMonth = state.ui.historyFilterMonth === 'all' ? (months[0] || 'all') : 'all';
+    rerender();
+  },
+  'history-month-prev': () => {
+    const months = historyMonths();
+    const idx = months.indexOf(state.ui.historyFilterMonth);
+    if (idx !== -1 && idx < months.length - 1) { state.ui.historyFilterMonth = months[idx+1]; rerender(); }
+  },
+  'history-month-next': () => {
+    const months = historyMonths();
+    const idx = months.indexOf(state.ui.historyFilterMonth);
+    if (idx > 0) { state.ui.historyFilterMonth = months[idx-1]; rerender(); }
+  },
+  'mark-reviewed': (ds) => {
+    const s = state.workoutSessions.find(w => w.id === ds.id);
+    s.reviewedByTrainer = true; saveState(); rerender();
+  },
+};
+
+/* ================= GLOBAL EVENT WIRING ================= */
+document.addEventListener('click', (e) => {
+  const navEl = e.target.closest('a[href^="#"], [data-action="go"]');
+  if (navEl) {
+    const targetHref = navEl.tagName === 'A' ? navEl.getAttribute('href') : navEl.dataset.href;
+    if (targetHref && targetHref !== (location.hash || '#/home')) {
+      const guardSeq = draftNavGuardSequence();
+      if (guardSeq) {
+        e.preventDefault();
+        state.ui.modal = { type: 'draft-nav-confirm', id: guardSeq.id, targetHref };
+        rerender();
+        return;
+      }
+      const emptySeq = emptyDraftOnCurrentPage();
+      if (emptySeq) {
+        state.sequences = state.sequences.filter(s => s.id !== emptySeq.id);
+        state.scheduledSessions = state.scheduledSessions.filter(sc => sc.sequenceId !== emptySeq.id);
+        saveState();
+      }
+    }
+  }
+  const el = e.target.closest('[data-action]');
+  // <select> elements fire 'click' just to open their native options list — that's
+  // not a selection. Acting on it here forces a re-render mid-interaction, which
+  // yanks the element out from under the open dropdown (it blinks and won't stay
+  // open). Selects are driven by the 'change' listener below instead.
+  if (!el || el.tagName === 'SELECT') {
+    if (!el && state.ui.profileMenuOpen && !e.target.closest('header')) { state.ui.profileMenuOpen = false; rerender(); }
+    return;
+  }
+  e.preventDefault();
+  const fn = actions[el.dataset.action];
+  if (fn) fn(el.dataset, el);
+});
+
+function sanitizeNumericInput(raw) {
+  let s = raw.replace(/[^0-9.]/g, '');
+  const firstDot = s.indexOf('.');
+  if (firstDot !== -1) s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+  return s;
+}
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.matches) return;
+  if (el.matches('[data-bind]')) {
+    let raw = el.value;
+    if (el.dataset.type === 'number') {
+      const clean = sanitizeNumericInput(raw);
+      if (clean !== raw) { el.value = clean; raw = clean; }
+    }
+    let val = raw;
+    if (el.dataset.type === 'number') val = val === '' ? null : Number(val);
+    setPath(state, el.dataset.bind, val);
+    saveState(); rerender();
+  } else if (el.matches('[data-action-input]')) {
+    const key = el.dataset.actionInput;
+    if (key === 'lib-search') state.ui.libSearch = el.value;
+    else if (key === 'lib-pick-search' && state.ui.modal) state.ui.modal.q = el.value;
+    rerender();
+  }
+});
+
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (!el.matches) return;
+  if (el.matches('[data-action-change]')) {
+    const key = el.dataset.actionChange;
+    if (key === 'history-filter-ex') { state.ui.historyFilterExercise = el.value; saveState(); }
+    rerender();
+  } else if (el.matches('select[data-action]')) {
+    const fn = actions[el.dataset.action];
+    if (fn) fn(el.dataset, el);
+  }
+});
+
+/* ================= TICKERS ================= */
+setInterval(() => {
+  if (!state.activeSession) return;
+  const t = document.getElementById('session-timer');
+  if (t) t.textContent = fmtDuration((Date.now() - state.activeSession.startedAt) / 1000);
+}, 1000);
+
+/* this module's top-level declarations aren't global — expose what a handful of
+   inline HTML attribute handlers (e.g. the inline-rename input's onkeydown) need */
+window.actions = actions;
+
+</script>
+</body>
+</html>

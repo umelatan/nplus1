@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "whitelist": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
+    },
+    "trainerIndex": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
+    },
+    "traineeIndex": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
+    },
+    "userData": {
+      "$traineeUid": {
+        ".read": "auth != null && (auth.uid === $traineeUid || root.child('traineeIndex').child($traineeUid).child(auth.uid).exists() || auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')",
+        ".write": "auth != null && (auth.uid === $traineeUid || root.child('traineeIndex').child($traineeUid).child(auth.uid).exists() || auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
+      }
+    }
+  }
+}
