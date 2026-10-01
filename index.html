@@ -187,6 +187,7 @@ function freshUiState() {
     libSearch:'', libCategory:'all', modal:null, expandedSeqExIdx:null, expandedHistorySessionId:null,
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
+    nicknameDefault:null, editNicknameError:null,
     theme,
   };
 }
@@ -757,6 +758,10 @@ function renderProfileMenu() {
       ${icon('admin_panel_settings','text-[18px] text-on-surface-variant')}
       <span class="font-label-md text-label-md text-on-surface">Admin Center</span>
     </button>` : ''}
+    <button data-action="open-edit-nickname" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">
+      ${icon('edit','text-[18px] text-on-surface-variant')}
+      <span class="font-label-md text-label-md text-on-surface">Edit nickname</span>
+    </button>
     <button data-action="sign-out" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">
       ${icon('logout','text-[18px] text-error')}
       <span class="font-label-md text-label-md text-error">Sign out</span>
@@ -806,6 +811,7 @@ function renderModal() {
   else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
   else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
+  else if (m.type === 'edit-nickname') inner = modalEditNickname(m);
   return `
   <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
     <div class="absolute inset-0 bg-on-background/40" data-action="close-modal"></div>
@@ -2320,6 +2326,12 @@ function modalAdminRemoveUser(m) {
     <p class="font-body-md text-body-md text-on-surface-variant">They'll lose access immediately and won't be able to sign in again unless re-added. ${m.role==='trainer' ? 'Their trainees will no longer see them as a coach.' : 'Their own workout data is kept, not deleted — re-adding them restores access to it.'}</p>
   `, `<button data-action="admin-remove-user-confirm" data-email="${esc(m.email)}" data-uid="${m.uid||''}" data-role="${m.role}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Remove</button>`);
 }
+function modalEditNickname(m) {
+  return modalShell('Edit nickname', `
+    <input id="f-edit-nickname" value="${esc(state.authUser.nickname || '')}" placeholder="Your name" autofocus onkeydown="if(event.key==='Enter'){actions['edit-nickname-confirm']({})}" class="w-full h-12 px-4 rounded-lg bg-surface-container-low border border-outline-variant/40 text-on-surface font-title-md text-title-md">
+    ${state.ui.editNicknameError ? `<p class="font-label-sm text-label-sm text-error flex items-center gap-1">${icon('error','text-[14px]')}${esc(state.ui.editNicknameError)}</p>` : ''}
+  `, `<button data-action="edit-nickname-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save</button>`);
+}
 
 /* ================= FOCUS-PRESERVING RE-RENDER ================= */
 function captureFocus() {
@@ -2373,6 +2385,23 @@ const actions = {
     const isAdmin = ADMIN_EMAILS.includes(user.email);
     const wlSnap = await get(ref(db, `whitelist/${ek}`));
     await finishResolveAccess(user, wlSnap.val(), isAdmin);
+  },
+  'open-edit-nickname': () => { state.ui.profileMenuOpen = false; state.ui.editNicknameError = null; state.ui.modal = { type: 'edit-nickname' }; rerender(); },
+  'edit-nickname-confirm': async () => {
+    const el = $('#f-edit-nickname');
+    const nickname = (el ? el.value : '').trim();
+    if (!nickname) { state.ui.editNicknameError = 'Enter a name.'; rerender(); return; }
+    const user = fbAuth.currentUser;
+    if (!user) return;
+    await update(ref(db, `users/${user.uid}`), { nickname });
+    state.authUser.nickname = nickname;
+    /* only patch state.users.* when the name on screen is actually MY OWN —
+       an admin viewing another trainee's program sees that trainee's name
+       there, not their own, and editing their own nickname shouldn't touch it */
+    if (state.users.trainer.id === user.uid) state.users.trainer.name = nickname;
+    if (state.users.client.id === user.uid) state.users.client.name = nickname;
+    state.ui.modal = null; state.ui.editNicknameError = null;
+    rerender();
   },
   'open-admin-add-user': () => { state.ui.modal = { type: 'admin-add-user' }; rerender(); },
   'admin-add-user-confirm': async () => {
