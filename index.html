@@ -220,6 +220,29 @@ function scheduleDataRender() {
   dataRenderTimer = setTimeout(() => { rerender(); }, 120);
 }
 let lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null };
+/* the Realtime Database silently drops any key whose value is an empty array/object
+   on write (it can't store a childless node) — so e.g. a freshly-added sequence
+   exercise's `prescription.drops: []` comes back as `drops: undefined` after a
+   round trip, and so does a sequence's `exercises: []` if the last exercise was
+   ever removed. Restore the expected empty-array shape right as data comes in,
+   so nothing downstream has to guard against an array field going missing. */
+function normalizeFromFirebase(key, arr) {
+  if (key === 'sequences') {
+    arr.forEach(seq => {
+      seq.exercises = seq.exercises || [];
+      seq.exercises.forEach(sx => { if (sx.prescription) sx.prescription.drops = sx.prescription.drops || []; });
+    });
+  } else if (key === 'workoutSessions') {
+    arr.forEach(s => {
+      s.exercises = s.exercises || [];
+      s.exercises.forEach(ex => {
+        ex.sets = ex.sets || [];
+        ex.sets.forEach(set => { set.drops = set.drops || []; });
+      });
+    });
+  }
+  return arr;
+}
 function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; clearTimeout(dataRenderTimer); }
 function attachDataListeners(traineeUid) {
   detachDataListeners();
@@ -228,7 +251,7 @@ function attachDataListeners(traineeUid) {
     const r = ref(db, `userData/${traineeUid}/${key}`);
     const cb = onValue(r, snap => {
       const obj = snap.val() || {};
-      state[key] = Object.values(obj);
+      state[key] = normalizeFromFirebase(key, Object.values(obj));
       lastSyncedJson[key] = JSON.stringify(arrayToObj(state[key]));
       scheduleDataRender();
     });
@@ -280,7 +303,6 @@ async function resolveAccess(user) {
   });
   const wlSnap = await get(ref(db, `whitelist/${ek}`));
   const wl = wlSnap.val();
-  if (wl && !wl.uid) { try { await update(ref(db, `whitelist/${ek}`), { uid: user.uid }); } catch(e) {} }
   if (!wl && !isAdmin) { state.notAuthorized = true; state.booting = false; render(); return; }
 
   state.isAdmin = isAdmin;
@@ -2165,8 +2187,17 @@ async function loadAdminCenterData() {
   if (adminLoading) return;
   adminLoading = true;
   try {
-    const wlSnap = await get(ref(db, 'whitelist'));
+    const [wlSnap, usersSnap] = await Promise.all([get(ref(db, 'whitelist')), get(ref(db, 'users'))]);
     const wl = Object.values(wlSnap.val() || {});
+    /* whitelist.uid is never written by the whitelisted user themselves (they're
+       not allowed to write to /whitelist, only admins are) — resolve "has this
+       person signed in, and what's their uid" by matching /users (which every
+       signed-in user does write to themselves) by email instead. */
+    const usersByEmail = {};
+    Object.entries(usersSnap.val() || {}).forEach(([uid, u]) => {
+      if (u && u.email) usersByEmail[u.email.toLowerCase()] = uid;
+    });
+    wl.forEach(w => { w.uid = usersByEmail[(w.email||'').toLowerCase()] || null; });
     const traineesByTrainer = {};
     for (const w of wl) {
       if (w.role === 'trainer' && w.uid) {
