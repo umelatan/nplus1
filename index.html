@@ -207,12 +207,31 @@ let state = {
 
 /* ---------- persistence (Firebase-backed) ---------- */
 let dataListeners = [];
-function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; }
+/* a single update() touching multiple collections fires one onValue callback per
+   collection in quick succession — rendering on each one individually is both
+   wasteful (several full re-renders for one logical change) and unsafe (a render
+   can land between two of those callbacks, when e.g. sequences has the new data
+   but exercises doesn't yet, and a row referencing a not-yet-synced exercise
+   would crash). Debounce them into a single focus-preserving rerender() instead. */
+let dataRenderTimer = null;
+function scheduleDataRender() {
+  if (state.booting) return;
+  clearTimeout(dataRenderTimer);
+  dataRenderTimer = setTimeout(() => { rerender(); }, 120);
+}
+let lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null };
+function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; clearTimeout(dataRenderTimer); }
 function attachDataListeners(traineeUid) {
   detachDataListeners();
+  lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null };
   ['exercises','sequences','scheduledSessions','workoutSessions'].forEach(key => {
     const r = ref(db, `userData/${traineeUid}/${key}`);
-    const cb = onValue(r, snap => { state[key] = Object.values(snap.val() || {}); if (!state.booting) render(); });
+    const cb = onValue(r, snap => {
+      const obj = snap.val() || {};
+      state[key] = Object.values(obj);
+      lastSyncedJson[key] = JSON.stringify(arrayToObj(state[key]));
+      scheduleDataRender();
+    });
     dataListeners.push({ ref:r, cb });
   });
   try {
@@ -230,12 +249,16 @@ function syncToFirebase() {
   if (!state.viewingTraineeUid) return;
   clearTimeout(fbSyncTimer);
   fbSyncTimer = setTimeout(() => {
-    update(ref(db, `userData/${state.viewingTraineeUid}`), {
-      exercises: arrayToObj(state.exercises),
-      sequences: arrayToObj(state.sequences),
-      scheduledSessions: arrayToObj(state.scheduledSessions),
-      workoutSessions: arrayToObj(state.workoutSessions),
-    }).catch(e => console.error('Firebase sync failed', e));
+    /* only write collections that actually changed since the last sync — most
+       edits touch one collection, so this avoids re-uploading (and re-echoing
+       back through the listeners above) the other three on every keystroke */
+    const payload = {};
+    ['exercises','sequences','scheduledSessions','workoutSessions'].forEach(key => {
+      const json = JSON.stringify(arrayToObj(state[key]));
+      if (json !== lastSyncedJson[key]) { payload[key] = JSON.parse(json); lastSyncedJson[key] = json; }
+    });
+    if (Object.keys(payload).length === 0) return;
+    update(ref(db, `userData/${state.viewingTraineeUid}`), payload).catch(e => console.error('Firebase sync failed', e));
   }, 500);
 }
 function saveState() {
@@ -531,7 +554,7 @@ function renderSignInScreen() {
   return renderCenteredScreen(`
     <div class="w-16 h-16 rounded-2xl bg-primary text-on-primary flex items-center justify-center font-headline-lg text-headline-lg font-bold">N+1</div>
     <h1 class="font-headline-lg text-headline-lg text-on-surface">Welcome to N+1</h1>
-    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">Sign in with the Google account your coach or admin whitelisted.</p>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">Only whitelisted email addresses are permitted. Sign in with the Google account your coach or admin added.</p>
     <button data-action="sign-in" class="h-12 px-6 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('login','text-[20px]')}Sign in with Google</button>
   `);
 }
@@ -556,6 +579,17 @@ function renderNoRoleScreen() {
 
 /* ================= RENDER SHELL ================= */
 function render() {
+  try { renderInner(); }
+  catch (e) {
+    console.error('Render failed', e);
+    $('#root').innerHTML = renderCenteredScreen(`
+      <h1 class="font-headline-lg text-headline-lg text-on-surface">Something went wrong</h1>
+      <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">${esc(e.message || String(e))}</p>
+      <button data-action="go" data-href="#/home" class="h-11 px-5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg" type="button">Back to Home</button>
+    `);
+  }
+}
+function renderInner() {
   applyTheme();
   if (!state.authUser) { $('#root').innerHTML = renderSignInScreen(); return; }
   if (state.booting) { $('#root').innerHTML = renderLoadingScreen(); return; }
@@ -718,6 +752,7 @@ function renderModal() {
   else if (m.type === 'cancel-scheduled-confirm') inner = modalCancelScheduledConfirm(m);
   else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
+  else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
   return `
   <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
     <div class="absolute inset-0 bg-on-background/40" data-action="close-modal"></div>
@@ -1279,6 +1314,7 @@ function renderCalendar() {
 function sequenceExerciseListRows(exercises) {
   return exercises.map((sx, i) => {
     const ex = getExercise(sx.exerciseId); const p = sx.prescription;
+    if (!ex) return '';
     return `
     <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-container-low">
       <span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">${i+1}</span>
@@ -1344,7 +1380,7 @@ function listFeedCard(s) {
       </div>
     </div>
     <div class="flex items-center justify-between pt-2 bg-surface-container-low/40 rounded-xl px-3 py-2">
-      <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>esc(getExercise(sx.exerciseId).name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
+      <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>getExercise(sx.exerciseId)).filter(Boolean).map(ex=>esc(ex.name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
       <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
     </div>
   </div>`;
@@ -1472,6 +1508,7 @@ function dropSummary(d, ex) {
 }
 function sequenceExerciseRow(seq, sx, idx, isTrainer) {
   const ex = getExercise(sx.exerciseId);
+  if (!ex) return '';
   const p = sx.prescription;
   const expanded = state.ui.expandedSeqExIdx === idx;
   const loggedDrops = expanded ? lastLoggedDropsFor(ex.id) : null;
@@ -2159,6 +2196,7 @@ function renderAdminCenter() {
   <div class="flex items-center gap-2 pt-2 mb-space-md">
     <a href="#/home" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">Admin Center</h2>
+    <button data-action="refresh-admin" aria-label="Refresh" class="h-10 w-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container" type="button">${icon('refresh','text-[20px]')}</button>
     <button data-action="open-admin-add-user" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>
   </div>
   ${state.ui.adminLoadError ? `
@@ -2182,8 +2220,11 @@ function adminUserRow(w) {
         <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(w.email)}</h4>
         <p class="font-label-sm text-label-sm text-on-surface-variant">${w.role==='trainer'?'Trainer':'Trainee'}${signedIn?'':' • hasn’t signed in yet'}</p>
       </div>
-      ${w.role==='trainer' && signedIn ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid}" data-trainer-email="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 flex-shrink-0" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
-      ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 flex-shrink-0" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        ${w.role==='trainer' ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid||''}" data-trainer-email="${esc(w.email)}" ${signedIn?'':'disabled'} title="${signedIn?'':'Waiting for this trainer to sign in at least once'}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 disabled:opacity-40" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
+        ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
+        <button data-action="open-admin-remove-user" data-email="${esc(w.email)}" data-uid="${w.uid||''}" data-role="${w.role}" aria-label="Remove ${esc(w.email)}" class="h-9 w-9 rounded-full flex items-center justify-center text-error hover:bg-error-container/40" type="button">${icon('person_remove','text-[18px]')}</button>
+      </div>
     </div>
     ${trainees.length ? `<div class="flex flex-wrap gap-1.5">${trainees.map(t=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(t.name)}</span>`).join('')}</div>` : ''}
   </div>`;
@@ -2215,6 +2256,11 @@ function modalAdminAssign(m) {
         </label>`).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No trainees have signed in yet — ask them to sign in once, then come back here.</p>`}
     </div>
   `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
+}
+function modalAdminRemoveUser(m) {
+  return modalShell(`Remove ${esc(m.email)}?`, `
+    <p class="font-body-md text-body-md text-on-surface-variant">They'll lose access immediately and won't be able to sign in again unless re-added. ${m.role==='trainer' ? 'Their trainees will no longer see them as a coach.' : 'Their own workout data is kept, not deleted — re-adding them restores access to it.'}</p>
+  `, `<button data-action="admin-remove-user-confirm" data-email="${esc(m.email)}" data-uid="${m.uid||''}" data-role="${m.role}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Remove</button>`);
 }
 
 /* ================= FOCUS-PRESERVING RE-RENDER ================= */
@@ -2265,7 +2311,7 @@ const actions = {
     state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
     loadAdminCenterData();
   },
-  'open-admin-assign': (ds) => { state.ui.modal = { type: 'admin-assign', trainerUid: ds.trainerUid, trainerEmail: ds.trainerEmail }; rerender(); },
+  'open-admin-assign': (ds) => { if (!ds.trainerUid) return; state.ui.modal = { type: 'admin-assign', trainerUid: ds.trainerUid, trainerEmail: ds.trainerEmail }; rerender(); },
   'admin-assign-confirm': async (ds) => {
     const trainerUid = ds.trainerUid;
     const boxes = $all('input[data-admin-trainee-uid]');
@@ -2280,6 +2326,26 @@ const actions = {
     loadAdminCenterData();
   },
   'retry-admin-load': () => { state.ui.adminLoadError = null; rerender(); loadAdminCenterData(); },
+  'refresh-admin': () => { state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender(); loadAdminCenterData(); },
+  'open-admin-remove-user': (ds) => { state.ui.modal = { type: 'admin-remove-user', email: ds.email, uid: ds.uid || null, role: ds.role }; rerender(); },
+  'admin-remove-user-confirm': async (ds) => {
+    const ek = emailKey(ds.email);
+    const updates = { [`whitelist/${ek}`]: null };
+    if (ds.uid) {
+      if (ds.role === 'trainer') {
+        const idxSnap = await get(ref(db, `trainerIndex/${ds.uid}`));
+        Object.keys(idxSnap.val() || {}).forEach(traineeUid => { updates[`traineeIndex/${traineeUid}/${ds.uid}`] = null; });
+        updates[`trainerIndex/${ds.uid}`] = null;
+      } else {
+        const idxSnap = await get(ref(db, `traineeIndex/${ds.uid}`));
+        Object.keys(idxSnap.val() || {}).forEach(trainerUid => { updates[`trainerIndex/${trainerUid}/${ds.uid}`] = null; });
+        updates[`traineeIndex/${ds.uid}`] = null;
+      }
+    }
+    await update(ref(db), updates);
+    state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
+    loadAdminCenterData();
+  },
   'admin-view-as': (ds) => {
     state.role = 'client'; state.ui.profileMenuOpen = false;
     setViewingTrainee(ds.uid, ds.name);
