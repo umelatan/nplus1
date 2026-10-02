@@ -479,7 +479,9 @@ function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function completedSessionsSorted() {
-  return [...state.workoutSessions].sort((a,b)=> b.date.localeCompare(a.date));
+  /* startedAt (real epoch ms) breaks ties correctly for same-day sessions;
+     older saved sessions may predate it, so fall back to date string */
+  return [...state.workoutSessions].sort((a,b)=> (b.startedAt||0) - (a.startedAt||0) || b.date.localeCompare(a.date));
 }
 function sessionsAwaitingReview() {
   return completedSessionsSorted().filter(s => !s.reviewedByTrainer);
@@ -506,9 +508,12 @@ function intensityNum(set, side='') {
   if (set['intensityMethod'+side] === 'rir') return 10 - Number(val);
   return Number(val);
 }
-/* most recent completed session (before given date, excluding a session id) containing exerciseId */
-function findPreviousExerciseBlock(exerciseId, beforeDate, excludeSessionId) {
-  const sessions = completedSessionsSorted().filter(s => s.id !== excludeSessionId && s.date < beforeDate);
+/* most recent completed session (excluding a session id) containing exerciseId.
+   Excludes by id, not by date — a same-day session (e.g. training the same
+   exercise twice in one day, or an AM/PM split) is a legitimate "previous
+   occurrence" and must not be filtered out just for sharing today's date. */
+function findPreviousExerciseBlock(exerciseId, excludeSessionId) {
+  const sessions = completedSessionsSorted().filter(s => s.id !== excludeSessionId);
   for (const s of sessions) {
     const block = s.exercises.find(e => e.exerciseId === exerciseId);
     if (block) return { session: s, block };
@@ -1191,7 +1196,7 @@ function renderHomeClient() {
     for (const ex of recent.exercises) {
       const top = topWorkingSet(ex);
       if (!top) continue;
-      const prev = findPreviousExerciseBlock(ex.exerciseId, recent.date, recent.id);
+      const prev = findPreviousExerciseBlock(ex.exerciseId, recent.id);
       const cmp = prev ? compareTopSet(topWorkingSet(prev.block), top) : null;
       if (cmp) {
         prCard = `
@@ -1779,7 +1784,7 @@ function loadTypeLabel(t) { return {single_total:'Single load', per_side:'Per si
 function buildSessionExercise(exerciseId, prescription) {
   const ex = getExercise(exerciseId);
   const p = prescription || { sets: 1, drops: [], intensityMethod: 'rpe', notes: '', restSeconds: null, repLow: null, repHigh: null, intensityTarget: null };
-  const prev = findPreviousExerciseBlock(exerciseId, todayISO(), null);
+  const prev = findPreviousExerciseBlock(exerciseId, null);
   const prevSets = prev ? prev.block.sets : null;
   const setCount = prevSets ? prevSets.length : p.sets;
   const sets = [];
@@ -1792,7 +1797,7 @@ function buildSessionExercise(exerciseId, prescription) {
     sets.push(set);
   }
   return { exerciseId: ex.id, nameSnapshot: ex.name, category: ex.category, laterality: ex.laterality, loadType: ex.loadType,
-    trainerNote: p.notes || ex.notes || '', exerciseNote: prev ? (prev.block.exerciseNote || '') : '',
+    trainerNote: prev ? (prev.block.trainerNote || '') : '', exerciseNote: prev ? (prev.block.exerciseNote || '') : '',
     restSeconds: p.restSeconds, targetRepLow: p.repLow, targetRepHigh: p.repHigh,
     targetIntensity: p.intensityTarget, sets };
 }
@@ -1841,7 +1846,7 @@ function finalizeActiveSession() {
   const s = state.activeSession;
   const finished = {
     id: s.id, sequenceId: s.sequenceId, sequenceName: s.sequenceName, scheduledSessionId: s.scheduledSessionId,
-    date: s.date, durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000), performedBy: s.performedBy,
+    date: s.date, startedAt: s.startedAt, durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000), performedBy: s.performedBy,
     reviewedByTrainer: s.performedBy === 'trainer', trainerNote: null, clientNoteForTrainer: '',
     exercises: s.exercises.map(e => clone(e)),
   };
@@ -1881,7 +1886,7 @@ function renderActiveWorkout() {
 }
 
 function renderWorkoutExercise(ex, exIdx, session) {
-  const prevFind = findPreviousExerciseBlock(ex.exerciseId, session.date, null);
+  const prevFind = findPreviousExerciseBlock(ex.exerciseId, null);
   const prevBlock = prevFind ? prevFind.block : null;
   return `
   <section class="mt-4 bg-surface-container-lowest rounded-xl p-4 shadow-sm">
@@ -1901,6 +1906,15 @@ function renderWorkoutExercise(ex, exIdx, session) {
       <div class="flex flex-col divide-y divide-outline-variant/20">
         ${prevSetRows(prevBlock)}
       </div>
+    </div>` : ''}
+    ${state.role === 'trainer' ? `
+    <label class="flex flex-col gap-1 mb-3">
+      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">${icon('edit_note','text-[16px]')}Trainer Notes <span class="text-on-surface-variant/60">(visible to both)</span></span>
+      <textarea data-bind="activeSession.exercises.${exIdx}.trainerNote" rows="1" placeholder="e.g. Keep elbows tucked, focus on tempo…" class="w-full px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-on-surface font-body-md text-body-md resize-none">${esc(ex.trainerNote || '')}</textarea>
+    </label>` : ex.trainerNote ? `
+    <div class="flex flex-col gap-1 mb-3">
+      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">${icon('edit_note','text-[16px]')}Note from ${esc(roleName('trainer'))}</span>
+      <p class="px-3 py-2 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md">${esc(ex.trainerNote)}</p>
     </div>` : ''}
     ${state.role === 'client' ? `
     <label class="flex flex-col gap-1 mb-3">
@@ -2138,7 +2152,7 @@ function renderSessionDetail(sessionId, isSummary) {
   const comparisons = [];
   for (const ex of s.exercises) {
     const top = topWorkingSet(ex);
-    const prev = findPreviousExerciseBlock(ex.exerciseId, s.date, s.id);
+    const prev = findPreviousExerciseBlock(ex.exerciseId, s.id);
     const cmp = prev ? compareTopSetFull(topWorkingSet(prev.block), top) : null;
     if (cmp) comparisons.push({ name: ex.nameSnapshot, ...cmp });
   }
@@ -2709,7 +2723,7 @@ const actions = {
   },
   'use-last-workout': (ds) => {
     const exIdx = Number(ds.exIdx); const e = state.activeSession.exercises[exIdx];
-    const prev = findPreviousExerciseBlock(e.exerciseId, state.activeSession.date, null);
+    const prev = findPreviousExerciseBlock(e.exerciseId, null);
     if (!prev) return;
     prev.block.sets.forEach((pSet, i) => {
       const cur = e.sets[i]; if (!cur) return;
@@ -2937,7 +2951,14 @@ document.addEventListener('input', (e) => {
       if (clean !== raw) { el.value = clean; raw = clean; }
     }
     let val = raw;
-    if (el.dataset.type === 'number') val = val === '' ? null : Number(val);
+    if (el.dataset.type === 'number') {
+      /* a trailing "." (e.g. "12." while typing "12.5") must NOT be coerced via
+         Number() yet — Number("12.") is 12, and re-rendering the input from that
+         would erase the decimal point the user just typed, making it impossible
+         to ever enter a fractional value through this field. Keep it as the raw
+         string until it's no longer ambiguous; blur finalizes it either way. */
+      val = raw === '' ? null : (/\.$/.test(raw) ? raw : Number(raw));
+    }
     setPath(state, el.dataset.bind, val);
     saveState(); rerender();
   } else if (el.matches('[data-action-input]')) {
@@ -2947,6 +2968,26 @@ document.addEventListener('input', (e) => {
     rerender();
   }
 });
+/* capture phase — blur doesn't bubble — finalizes any field left mid-decimal
+   (e.g. "12.") into a clean number once the user moves on. Deferred via
+   setTimeout: this blur can itself fire as a side effect of the keystroke
+   rerender() that's already replacing #root.innerHTML (the old input being
+   detached triggers it) — calling rerender() again synchronously from inside
+   that still-in-progress DOM swap corrupts it ("node no longer a child of
+   this node"). Running on the next tick lets that swap finish first. */
+document.addEventListener('blur', (e) => {
+  const el = e.target;
+  if (!el.matches || !el.matches('[data-bind][data-type="number"]')) return;
+  const bindPath = el.dataset.bind;
+  setTimeout(() => {
+    const current = getPath(state, bindPath);
+    if (typeof current === 'string') {
+      const n = current === '' || current === '.' || current === '-' ? null : Number(current);
+      setPath(state, bindPath, n == null || isNaN(n) ? null : n);
+      saveState(); rerender();
+    }
+  }, 0);
+}, true);
 
 document.addEventListener('change', (e) => {
   const el = e.target;
