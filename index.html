@@ -1798,12 +1798,19 @@ function sessionCustomized(s) {
 }
 /* a fresh sequence-exercise entry for adding ex to a sequence, seeded from its own
    default sets/drop-sets if it has any (set at creation time, optional) */
+/* a blank prescription drop slot. Must carry a non-null field (id) — the Realtime
+   Database treats any key with a null value as a delete, so an object left with
+   nothing but weight:null, reps:null ends up with zero children once written and
+   is pruned away entirely on the next read, silently losing the whole slot (not
+   just its contents). The id keeps the slot (and therefore the drop count) alive
+   across a sync round trip even before weight/reps are ever filled in. */
+function emptyPrescriptionDrop() { return { id: uid('drop'), weight: null, reps: null }; }
 function sequenceExerciseFromLibrary(ex) {
   const dropCount = ex.defaultDropCount || 0;
   return { id: uid('sqx'), exerciseId: ex.id, prescription: {
     sets: ex.defaultSets || 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null,
     intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '',
-    drops: Array.from({length: dropCount}, () => ({weight: null, reps: null}))
+    drops: Array.from({length: dropCount}, emptyPrescriptionDrop)
   }};
 }
 /* turns a live session exercise block into a sequence prescription, so "update the sequence" can persist what was actually done */
@@ -1813,7 +1820,7 @@ function sequenceExerciseFromSessionBlock(e) {
     sets: e.sets.length, repLow: e.targetRepLow ?? 8, repHigh: e.targetRepHigh ?? 12,
     targetWeight: null, intensityMethod: 'rpe', intensityTarget: e.targetIntensity ?? 8,
     restSeconds: e.restSeconds ?? 75, notes: e.trainerNote || '',
-    drops: last ? (last.drops||[]).map(() => ({weight:null, reps:null})) : []
+    drops: last ? (last.drops||[]).map(emptyPrescriptionDrop) : []
   }};
 }
 function finalizeActiveSession() {
@@ -2815,7 +2822,7 @@ const actions = {
     const sessionPrescription = (defaultSets || defaultDropCount) ? {
       sets: defaultSets || 1, repLow: null, repHigh: null, targetWeight: null, intensityMethod: 'rpe',
       intensityTarget: null, restSeconds: null, notes: '',
-      drops: Array.from({length: defaultDropCount||0}, () => ({weight:null, reps:null})),
+      drops: Array.from({length: defaultDropCount||0}, emptyPrescriptionDrop),
     } : null;
     if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, sessionPrescription)); }
     else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, sessionPrescription); }
@@ -2830,7 +2837,7 @@ const actions = {
     s.plannedBy = el.value;
     saveState(); rerender();
   },
-  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push({ weight: null, reps: null }); saveState(); rerender(); },
+  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); saveState(); rerender(); },
   'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
   'move-exercise': (ds) => {
     const seq = getSequence(ds.seqId), idx = Number(ds.idx), j = idx + Number(ds.dir);
