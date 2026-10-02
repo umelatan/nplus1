@@ -1053,6 +1053,15 @@ function modalNewExercise(m) {
         </select>
       </label>
     </div>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default sets <span class="text-on-surface-variant/60">(optional)</span></span>
+        <input id="nf-sets" type="text" inputmode="numeric" placeholder="e.g. 3" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+      </label>
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
+        <input id="nf-drops" type="text" inputmode="numeric" placeholder="e.g. 0" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+      </label>
+    </div>
+    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">If left blank, this gets added to a sequence with 1 set and no drop sets — editable later as usual.</p>
   `, `<button data-action="new-exercise-save" data-seq-id="${m.seqId||''}" data-mode="${m.mode||''}" data-ex-idx="${m.exIdx ?? ''}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Exercise</button>`);
 }
 function modalFinishWorkout(m) {
@@ -1786,6 +1795,16 @@ function sessionCustomized(s) {
   if (!seq) return false;
   const a = seq.exercises.map(sx => sx.exerciseId), b = s.exercises.map(e => e.exerciseId);
   return a.length !== b.length || a.some((id, i) => id !== b[i]);
+}
+/* a fresh sequence-exercise entry for adding ex to a sequence, seeded from its own
+   default sets/drop-sets if it has any (set at creation time, optional) */
+function sequenceExerciseFromLibrary(ex) {
+  const dropCount = ex.defaultDropCount || 0;
+  return { id: uid('sqx'), exerciseId: ex.id, prescription: {
+    sets: ex.defaultSets || 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null,
+    intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '',
+    drops: Array.from({length: dropCount}, () => ({weight: null, reps: null}))
+  }};
 }
 /* turns a live session exercise block into a sequence prescription, so "update the sequence" can persist what was actually done */
 function sequenceExerciseFromSessionBlock(e) {
@@ -2768,7 +2787,7 @@ const actions = {
   'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
   'add-exercise-confirm': (ds) => {
     const seq = getSequence(ds.seqId), ex = getExercise(ds.exerciseId);
-    seq.exercises.push({ id: uid('sqx'), exerciseId: ex.id, prescription: { sets: 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null, intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '', drops: [] } });
+    seq.exercises.push(sequenceExerciseFromLibrary(ex));
     state.ui.modal = null; saveState(); rerender();
   },
   'open-add-exercise-session': () => { state.ui.modal = { type: 'session-exercise-picker', mode: 'add', q: '' }; rerender(); },
@@ -2787,11 +2806,20 @@ const actions = {
   },
   'new-exercise-save': (ds) => {
     const name = $('#nf-name').value.trim(); if (!name) return;
-    const ex = { id: uid('ex'), name, category: $('#nf-category').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, notes: '', custom: true };
+    const setsVal = $('#nf-sets').value.trim();
+    const dropsVal = $('#nf-drops').value.trim();
+    const defaultSets = setsVal ? (Math.max(1, Math.round(Number(setsVal))) || 1) : null;
+    const defaultDropCount = dropsVal ? (Math.max(0, Math.round(Number(dropsVal))) || 0) : null;
+    const ex = { id: uid('ex'), name, category: $('#nf-category').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, defaultSets, defaultDropCount, notes: '', custom: true };
     state.exercises.push(ex);
-    if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, null)); }
-    else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, null); }
-    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push({ id: uid('sqx'), exerciseId: ex.id, prescription: { sets: 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null, intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '', drops: [] } }); }
+    const sessionPrescription = (defaultSets || defaultDropCount) ? {
+      sets: defaultSets || 1, repLow: null, repHigh: null, targetWeight: null, intensityMethod: 'rpe',
+      intensityTarget: null, restSeconds: null, notes: '',
+      drops: Array.from({length: defaultDropCount||0}, () => ({weight:null, reps:null})),
+    } : null;
+    if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, sessionPrescription)); }
+    else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, sessionPrescription); }
+    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); }
     state.ui.modal = null; saveState(); rerender();
   },
   'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
