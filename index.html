@@ -1981,7 +1981,7 @@ function intensityPillGroup(basePath, obj, opts={}) {
   const compact = !!opts.compact;
   const methodKey = 'intensityMethod' + side, valueKey = 'intensityValue' + side;
   const method = obj[methodKey] || 'rpe';
-  const values = method === 'rir' ? [3,2,1,0] : [5,6,7,8,9,10];
+  const values = method === 'rir' ? [3,2,1,0] : [3,4,5,6,7,8,9,10];
   const wrapCls = compact ? 'mt-2 p-1.5' : 'mt-2.5 p-2';
   const pillCls = compact ? 'min-h-[32px] px-2 py-0.5 font-label-sm text-label-sm' : 'min-h-[36px] px-3 py-1 font-label-md text-label-md';
   return `
