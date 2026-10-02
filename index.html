@@ -1697,10 +1697,24 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
       ${isTrainer ? `
       <div class="grid grid-cols-2 gap-2">
         <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Sets</span><input data-bind="sequences.${seqIdx(seq.id)}.exercises.${idx}.prescription.sets" data-type="number" type="text" inputmode="decimal" value="${p.sets}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center"></label>
+        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Category</span>
+          <select data-action="set-exercise-category" data-exercise-id="${ex.id}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center">
+            ${CATEGORIES.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </label>
         <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Tracking</span>
           <select data-action="set-exercise-laterality" data-exercise-id="${ex.id}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center">
             <option value="bilateral" ${ex.laterality!=='unilateral'?'selected':''}>Bilateral</option>
             <option value="unilateral" ${ex.laterality==='unilateral'?'selected':''}>Unilateral (L/R)</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Load type</span>
+          <select data-action="set-exercise-loadtype" data-exercise-id="${ex.id}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center">
+            <option value="single_total" ${ex.loadType==='single_total'?'selected':''}>Single total</option>
+            <option value="per_side" ${ex.loadType==='per_side'?'selected':''}>Per side (hand, leg, etc.)</option>
+            <option value="machine_stack" ${ex.loadType==='machine_stack'?'selected':''}>Machine/cable stack</option>
+            <option value="bodyweight" ${ex.loadType==='bodyweight'?'selected':''}>Bodyweight</option>
+            <option value="assisted" ${ex.loadType==='assisted'?'selected':''}>Assisted</option>
           </select>
         </label>
       </div>
@@ -2830,6 +2844,8 @@ const actions = {
     state.ui.modal = null; saveState(); rerender();
   },
   'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
+  'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; saveState(); rerender(); },
+  'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; saveState(); rerender(); },
   'change-planned-by': (ds, el) => {
     if (!state.isAdmin) return;
     const s = state.scheduledSessions.find(x => x.id === ds.id);
