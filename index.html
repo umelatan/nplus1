@@ -2410,7 +2410,7 @@ function modalAdminAssign(m) {
           <span class="font-label-lg text-label-lg text-on-surface">${t.nickname ? esc(t.nickname) : esc(t.email)}</span>
         </label>`).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No trainees have signed in yet — ask them to sign in once, then come back here.</p>`}
     </div>
-  `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
+  `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid || ''}" data-trainer-email="${esc(m.trainerEmail)}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
 }
 function modalAdminRemoveUser(m) {
   return modalShell(`Remove ${esc(m.email)}?`, `
