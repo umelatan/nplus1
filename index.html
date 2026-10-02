@@ -317,6 +317,25 @@ function myName() { return state.authUser ? (state.authUser.nickname || state.au
    visit required. Returns the trainees newly linked this call (for the
    "you've been assigned a trainee" screen), or [] if nothing was pending —
    a user with no pending assignments at all just sees normal behavior. */
+/* a trainee whose coach has been pre-assigned but hasn't signed in yet has no
+   resolvable uid for them — but their email (the only thing known about them
+   this early) is still worth showing instead of a plain "no trainer" placeholder,
+   e.g. so "Planned by" has something meaningful to attribute to. */
+async function pendingTrainerNameFor(traineeUid) {
+  try {
+    const pendingSnap = await get(ref(db, `pendingTrainerAssignments/${traineeUid}`));
+    const pendingKeys = Object.keys(pendingSnap.val() || {});
+    if (!pendingKeys.length) return null;
+    const wlSnap = await get(ref(db, 'whitelist'));
+    const wl = Object.values(wlSnap.val() || {});
+    const match = wl.find(w => pendingKeys.includes(emailKey(w.email)));
+    return match ? match.email : null;
+  } catch (e) {
+    console.error('Failed to resolve pending trainer name', e);
+    return null;
+  }
+}
+
 async function resolvePendingTrainerAssignments(user) {
   try {
     const ek = emailKey(user.email);
@@ -391,7 +410,10 @@ async function finishResolveAccess(user, wl, isAdmin) {
       const t = tSnap.val();
       state.users.trainer = { id: trainerUids[0], name: t ? nameOf(t) : 'Trainer' };
     } else {
-      state.users.trainer = { id: null, name: 'No trainer assigned yet' };
+      const pendingEmail = await pendingTrainerNameFor(user.uid);
+      state.users.trainer = pendingEmail
+        ? { id: null, name: pendingEmail, pending: true }
+        : { id: null, name: 'No trainer assigned yet' };
     }
   } else if (state.myBaseRole === 'trainer') {
     state.users.trainer = { id: user.uid, name: myName() };
@@ -772,7 +794,8 @@ function renderResumeBar() {
 }
 
 function renderHeader(screenTitle) {
-  const connectedName = state.role === 'client' ? state.users.trainer.name : state.users.client.name;
+  const connectedUser = state.role === 'client' ? state.users.trainer : state.users.client;
+  const isPending = !!connectedUser.pending;
   return `
   <header class="fixed top-0 w-full z-50 pt-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
     <div class="h-16 px-margin flex items-center justify-between gap-space-sm max-w-xl mx-auto">
@@ -782,10 +805,10 @@ function renderHeader(screenTitle) {
           <span class="font-title-md text-title-md text-on-surface truncate">${esc(screenTitle)}</span>
           <div class="flex items-center gap-1.5">
             <span class="relative flex h-2 w-2">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              ${!isPending ? `<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>` : ''}
+              <span class="relative inline-flex rounded-full h-2 w-2 ${isPending?'bg-tertiary':'bg-primary'}"></span>
             </span>
-            <span class="font-label-sm text-label-sm text-on-surface-variant truncate">${esc(connectedName)} • Connected</span>
+            <span class="font-label-sm text-label-sm text-on-surface-variant truncate">${esc(connectedUser.name)} • ${isPending ? 'Pending sign-in' : 'Connected'}</span>
           </div>
         </div>
       </div>
