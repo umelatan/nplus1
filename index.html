@@ -2960,6 +2960,28 @@ document.addEventListener('input', (e) => {
       val = raw === '' ? null : (/\.$/.test(raw) ? raw : Number(raw));
     }
     setPath(state, el.dataset.bind, val);
+    /* unilateral weight entry: duplicate onto the other side as a convenience
+       (most dumbbell/single-limb work uses the same load both sides) — but
+       only while that side hasn't been typed into directly, so correcting it
+       afterward for genuinely asymmetric loads doesn't ping-pong back and
+       clobber the side the user already set. Reps/RPE are never mirrored. */
+    const sideMatch = el.dataset.bind.match(/^(.*)\.weight(Left|Right)$/);
+    if (sideMatch) {
+      const setObj = getPath(state, sideMatch[1]);
+      const side = sideMatch[2], otherSide = side === 'Left' ? 'Right' : 'Left';
+      /* undefined = fresh (never touched), 'left'/'right' = currently mirroring
+         from that side, false = permanently broken — once the user has typed
+         into the non-driving side even once, stays independent for this set
+         for every keystroke after, not just the first */
+      if (setObj && setObj._weightMirrorFrom !== false) {
+        if (setObj._weightMirrorFrom == null || setObj._weightMirrorFrom === side) {
+          setObj['weight' + otherSide] = typeof val === 'string' ? Number(val) : val;
+          setObj._weightMirrorFrom = side;
+        } else {
+          setObj._weightMirrorFrom = false;
+        }
+      }
+    }
     saveState(); rerender();
   } else if (el.matches('[data-action-input]')) {
     const key = el.dataset.actionInput;
