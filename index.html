@@ -898,6 +898,7 @@ function renderModal() {
   else if (m.type === 'discard-confirm') inner = modalDiscardConfirm(m);
   else if (m.type === 'start-workout-pick') inner = modalStartWorkoutPick(m);
   else if (m.type === 'delete-sequence-confirm') inner = modalDeleteSequenceConfirm(m);
+  else if (m.type === 'delete-exercise-confirm') inner = modalDeleteExerciseConfirm(m);
   else if (m.type === 'draft-nav-confirm') inner = modalDraftNavConfirm(m);
   else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
   else if (m.type === 'cancel-scheduled-confirm') inner = modalCancelScheduledConfirm(m);
@@ -1121,6 +1122,20 @@ function modalDeleteSequenceConfirm(m) {
       : `Delete "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>"? This permanently removes the sequence and its exercise prescriptions. Past logged workouts and history are not affected. This can't be undone.`}</p>
   `, `
     <button data-action="delete-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">${isDraft ? 'Discard Draft' : 'Delete Sequence'}</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Cancel</button>
+  `);
+}
+function sequencesUsingExercise(exerciseId) {
+  return state.sequences.filter(s => s.exercises.some(sx => sx.exerciseId === exerciseId));
+}
+function modalDeleteExerciseConfirm(m) {
+  const ex = getExercise(m.id);
+  const usedIn = ex ? sequencesUsingExercise(ex.id) : [];
+  return modalShell('Delete Exercise', `
+    <p class="font-body-md text-body-md text-on-surface-variant">Delete "<span class="text-on-surface font-semibold">${esc(ex ? ex.name : '')}</span>"? This permanently removes it from the library. Past logged workouts and history are not affected. This can't be undone.</p>
+    ${usedIn.length ? `<p class="font-body-md text-body-md text-tertiary flex items-center gap-1">${icon('warning','text-[16px]')}Used in ${usedIn.length} sequence${usedIn.length>1?'s':''}: ${usedIn.map(s=>esc(s.name)).join(', ')} — it'll be removed from ${usedIn.length>1?'them':'it'} too.</p>` : ''}
+  `, `
+    <button data-action="delete-exercise-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Delete Exercise</button>
     <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Cancel</button>
   `);
 }
@@ -1727,7 +1742,10 @@ function renderLibrary() {
         <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(e.name)}</h4>
         <p class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${esc(e.equipment||'—')} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(e.loadType)}</p>
       </div>
-      <button data-action="go" data-href="#/history/exercise/${e.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant flex-shrink-0" type="button">${icon('show_chart','text-[18px]')}</button>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button data-action="go" data-href="#/history/exercise/${e.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant" type="button">${icon('show_chart','text-[18px]')}</button>
+        ${isTrainer ? `<button data-action="open-delete-exercise" data-id="${e.id}" aria-label="Delete ${esc(e.name)}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
+      </div>
     </div>`).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No exercises match.</p>`}
   </div>
   `;
@@ -2717,6 +2735,13 @@ const actions = {
     saveState();
     const r = route();
     if (r.parts[0] === 'sequences' && r.parts[1] === ds.id) navigate('#/sequences'); else rerender();
+  },
+  'open-delete-exercise': (ds) => { state.ui.modal = { type: 'delete-exercise-confirm', id: ds.id }; rerender(); },
+  'delete-exercise-confirm': (ds) => {
+    state.exercises = state.exercises.filter(e => e.id !== ds.id);
+    state.sequences.forEach(s => { s.exercises = s.exercises.filter(sx => sx.exerciseId !== ds.id); });
+    state.ui.modal = null;
+    saveState(); rerender();
   },
   'draft-nav-save': () => { const href = state.ui.modal.targetHref; state.ui.modal = null; navigate(href); },
   'draft-nav-discard': () => {
