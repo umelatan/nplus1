@@ -479,9 +479,13 @@ function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function completedSessionsSorted() {
-  /* startedAt (real epoch ms) breaks ties correctly for same-day sessions;
-     older saved sessions may predate it, so fall back to date string */
-  return [...state.workoutSessions].sort((a,b)=> (b.startedAt||0) - (a.startedAt||0) || b.date.localeCompare(a.date));
+  /* date (the day the session is attributed to) is the primary sort — a
+     workout started from a scheduled item now keeps that item's date even
+     if actually logged later (see beginWorkout), e.g. catching up on a
+     session scheduled for last week. startedAt (real epoch ms) only breaks
+     ties between sessions sharing the exact same date, so same-day sessions
+     (an AM/PM split, or redoing something) still order correctly. */
+  return [...state.workoutSessions].sort((a,b)=> b.date.localeCompare(a.date) || (b.startedAt||0) - (a.startedAt||0));
 }
 function sessionsAwaitingReview() {
   return completedSessionsSorted().filter(s => !s.reviewedByTrainer);
@@ -1804,8 +1808,14 @@ function buildSessionExercise(exerciseId, prescription) {
 function beginWorkout(sequenceId, scheduledId) {
   const seq = getSequence(sequenceId);
   const exercises = seq.exercises.map(sx => buildSessionExercise(sx.exerciseId, sx.prescription));
+  /* a workout started from a scheduled item (e.g. catching up on a session
+     scheduled for a past date) is logged under THAT date, not whatever day
+     you happened to press Start on — otherwise backfilling an old session
+     always showed up as "today" everywhere (Home, Calendar, history). Only
+     an ad-hoc start with no scheduled item (no scheduledId) defaults to today. */
+  const sc = scheduledId ? state.scheduledSessions.find(x => x.id === scheduledId) : null;
   state.activeSession = { id: uid('ws'), sequenceId: seq.id, sequenceName: seq.name, scheduledSessionId: scheduledId,
-    date: todayISO(), startedAt: Date.now(), performedBy: state.role, exercises };
+    date: sc ? sc.date : todayISO(), startedAt: Date.now(), performedBy: state.role, exercises };
   saveState(); navigate('#/workout');
 }
 /* true when the live session's exercises (swapped/added mid-session) no longer match the sequence it started from */
