@@ -897,7 +897,6 @@ function renderModal() {
   else if (m.type === 'finish-workout') inner = modalFinishWorkout(m);
   else if (m.type === 'discard-confirm') inner = modalDiscardConfirm(m);
   else if (m.type === 'start-workout-pick') inner = modalStartWorkoutPick(m);
-  else if (m.type === 'rename-sequence') inner = modalRenameSequence(m);
   else if (m.type === 'delete-sequence-confirm') inner = modalDeleteSequenceConfirm(m);
   else if (m.type === 'draft-nav-confirm') inner = modalDraftNavConfirm(m);
   else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
@@ -1112,12 +1111,6 @@ function modalStartWorkoutPick(m) {
         </button>`).join('')}
     </div>
   `, '');
-}
-function modalRenameSequence(m) {
-  return modalShell('Rename Sequence', `
-    <input id="f-rename" value="${esc(m.name)}" class="h-12 px-3 rounded-lg bg-surface-container-low border ${m.error?'border-error':'border-outline-variant/40'}">
-    ${m.error ? `<p class="font-label-sm text-label-sm text-error -mt-2 flex items-center gap-1">${icon('error','text-[14px]')}${esc(m.error)}</p>` : ''}
-  `, `<button data-action="rename-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save</button>`);
 }
 function modalDeleteSequenceConfirm(m) {
   const seq = getSequence(m.id);
@@ -1607,15 +1600,24 @@ function renderSequenceDetail(seqId) {
   if (!s) return `<p class="text-on-surface-variant">Sequence not found.</p>`;
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   const isDraft = !!s.draft;
+  const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
   return `
   <div class="flex items-center gap-2 pt-2 mb-1">
     <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
-    <button data-action="open-rename" data-id="${s.id}" class="text-left flex-1 min-w-0" type="button">
+    ${isRenaming ? `
+    <input id="f-inline-rename-${s.id}" value="${esc(state.ui.inlineRenameDraft ?? s.name)}" autofocus onkeydown="if(event.key==='Enter'){actions['confirm-inline-rename']({id:'${s.id}'})}else if(event.key==='Escape'){actions['cancel-inline-rename']({})}" class="flex-1 min-w-0 h-10 px-2.5 rounded-lg bg-surface-container-low border ${state.ui.inlineRenameError?'border-error':'border-primary'} text-on-surface font-headline-lg text-headline-lg font-bold">
+    <button data-action="confirm-inline-rename" data-id="${s.id}" aria-label="Save name" class="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0" type="button">${icon('check','text-[18px]')}</button>
+    <button data-action="cancel-inline-rename" aria-label="Cancel rename" class="w-9 h-9 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center flex-shrink-0" type="button">${icon('close','text-[18px]')}</button>
+    ` : `
+    <button data-action="start-inline-rename" data-id="${s.id}" class="flex items-center gap-1.5 text-left flex-1 min-w-0" type="button">
       <h2 class="font-headline-lg text-headline-lg text-on-surface truncate">${esc(s.name)}</h2>
+      ${icon('edit','text-[16px] text-on-surface-variant flex-shrink-0')}
     </button>
     ${(isTrainer && !isDraft) ? `<button data-action="duplicate-sequence" data-id="${s.id}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant" type="button">${icon('content_copy','text-[18px]')}</button>` : ''}
     ${(isTrainer && !isDraft) ? `<button data-action="open-delete-sequence" data-id="${s.id}" aria-label="Delete sequence" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
+    `}
   </div>
+  ${isRenaming && state.ui.inlineRenameError ? `<p class="font-label-sm text-label-sm text-error mb-1 pl-11 flex items-center gap-1">${icon('error','text-[14px]')}${esc(state.ui.inlineRenameError)}</p>` : ''}
   <p class="font-body-md text-body-md text-on-surface-variant mb-space-md">${esc(s.description||'')}</p>
 
   <div class="flex flex-col gap-space-sm">
@@ -2725,7 +2727,6 @@ const actions = {
     saveState();
     navigate(href);
   },
-  'open-rename': (ds) => { state.ui.modal = { type: 'rename-sequence', id: ds.id, name: getSequence(ds.id).name }; rerender(); },
   'start-inline-rename': (ds) => { state.ui.inlineRenameSeqId = ds.id; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
   'cancel-inline-rename': () => { state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
   'confirm-inline-rename': (ds) => {
@@ -2739,12 +2740,6 @@ const actions = {
     }
     getSequence(ds.id).name = name;
     state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
-  },
-  'rename-sequence-confirm': (ds) => {
-    const name = $('#f-rename').value.trim();
-    if (!name) { state.ui.modal = null; rerender(); return; }
-    if (sequenceNameTaken(name, ds.id)) { state.ui.modal.name = name; state.ui.modal.error = 'A sequence with this name already exists.'; rerender(); return; }
-    getSequence(ds.id).name = name; state.ui.modal = null; saveState(); rerender();
   },
   'toggle-seq-ex': (ds) => { const idx = Number(ds.idx); state.ui.expandedSeqExIdx = state.ui.expandedSeqExIdx === idx ? null : idx; rerender(); },
   'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
