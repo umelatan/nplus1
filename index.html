@@ -1037,9 +1037,6 @@ function modalNewExercise(m) {
     <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Category</span>
       <select id="nf-category" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">${CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select>
     </label>
-    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Equipment</span>
-      <input id="nf-equipment" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40" placeholder="e.g. Dumbbell, Barbell, Machine">
-    </label>
     <div class="grid grid-cols-2 gap-3">
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Laterality</span>
         <select id="nf-laterality" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
@@ -1740,7 +1737,7 @@ function renderLibrary() {
     <div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2">
       <div class="min-w-0">
         <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(e.name)}</h4>
-        <p class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${esc(e.equipment||'—')} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(e.loadType)}</p>
+        <p class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)} • ${e.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(e.loadType)}</p>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
         <button data-action="go" data-href="#/history/exercise/${e.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant" type="button">${icon('show_chart','text-[18px]')}</button>
@@ -2790,7 +2787,7 @@ const actions = {
   },
   'new-exercise-save': (ds) => {
     const name = $('#nf-name').value.trim(); if (!name) return;
-    const ex = { id: uid('ex'), name, category: $('#nf-category').value, equipment: $('#nf-equipment').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, notes: '', custom: true };
+    const ex = { id: uid('ex'), name, category: $('#nf-category').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, notes: '', custom: true };
     state.exercises.push(ex);
     if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, null)); }
     else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, null); }
