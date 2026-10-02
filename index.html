@@ -151,6 +151,9 @@ const db = getDatabase(fbApp);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_EMAILS = ['nurnasuhaa@gmail.com', 'shaf.r210003@gmail.com'];
 function emailKey(email) { return (email || '').toLowerCase().trim().replace(/\./g, ','); }
+/* key used to look up a not-yet-signed-in trainer's assigned trainees in
+   state.ui.adminTraineesByTrainer, which otherwise keys by uid */
+function adminPendingKey(email) { return 'pending:' + emailKey(email); }
 function arrayToObj(arr) { const o = {}; (arr || []).forEach(item => { if (item && item.id) o[item.id] = item; }); return o; }
 
 /* ---------- tiny utils ---------- */
@@ -198,6 +201,9 @@ let state = {
   notAuthorized: false,
   myBaseRole: null,
   myTrainees: [],
+  needsNickname: false,
+  justAssignedTrainees: [],
+  pendingJustAssigned: null,
   viewingTraineeUid: null,
   role: 'client',
   users: { trainer: { id:null, name:'' }, client: { id:null, name:'' } },
@@ -302,6 +308,43 @@ function saveState() {
 function nameOf(u) { return (u && (u.nickname || u.displayName || u.email)) || ''; }
 function myName() { return state.authUser ? (state.authUser.nickname || state.authUser.displayName || state.authUser.email) : ''; }
 
+/* an admin can assign a trainee to a trainer who hasn't signed in yet (the
+   trainee must already have signed in — their uid has to be known), recorded
+   as pendingTrainerAssignments/{traineeUid}/{trainerEmailKey}:true. The first
+   time that trainer actually signs in, their own auth.token.email proves to
+   the security rules that this specific pending record names them, letting
+   them write themselves into trainerIndex/traineeIndex — no admin follow-up
+   visit required. Returns the trainees newly linked this call (for the
+   "you've been assigned a trainee" screen), or [] if nothing was pending —
+   a user with no pending assignments at all just sees normal behavior. */
+async function resolvePendingTrainerAssignments(user) {
+  try {
+    const ek = emailKey(user.email);
+    const snap = await get(ref(db, 'pendingTrainerAssignments'));
+    const all = snap.val() || {};
+    const updates = {};
+    const candidates = [];
+    for (const traineeUid of Object.keys(all)) {
+      if (all[traineeUid] && all[traineeUid][ek]) candidates.push(traineeUid);
+    }
+    if (!candidates.length) return [];
+    const newlyAssigned = [];
+    for (const traineeUid of candidates) {
+      const alreadySnap = await get(ref(db, `trainerIndex/${user.uid}/${traineeUid}`));
+      if (alreadySnap.exists()) continue;
+      updates[`trainerIndex/${user.uid}/${traineeUid}`] = true;
+      updates[`traineeIndex/${traineeUid}/${user.uid}`] = true;
+      const uSnap = await get(ref(db, `users/${traineeUid}`));
+      newlyAssigned.push({ uid: traineeUid, name: nameOf(uSnap.val()) || 'your new trainee' });
+    }
+    if (newlyAssigned.length) await update(ref(db), updates);
+    return newlyAssigned;
+  } catch (e) {
+    console.error('Failed to resolve pending trainer assignments', e);
+    return [];
+  }
+}
+
 async function resolveAccess(user) {
   const ek = emailKey(user.email);
   const isAdmin = ADMIN_EMAILS.includes(user.email);
@@ -316,12 +359,16 @@ async function resolveAccess(user) {
   const wl = wlSnap.val();
   if (!wl && !isAdmin) { state.notAuthorized = true; state.booting = false; render(); return; }
 
+  const justAssigned = await resolvePendingTrainerAssignments(user);
+
   if (existing && existing.nickname) {
     state.authUser.nickname = existing.nickname;
+    state.justAssignedTrainees = justAssigned;
     await finishResolveAccess(user, wl, isAdmin);
   } else {
     state.needsNickname = true;
     state.ui.nicknameDefault = user.displayName || user.email;
+    state.pendingJustAssigned = justAssigned;
     state.booting = false;
     render();
   }
@@ -369,6 +416,7 @@ onAuthStateChanged(fbAuth, (user) => {
   if (!user) {
     state.authUser = null; state.booting = false; state.notAuthorized = false;
     state.isAdmin = false; state.myBaseRole = null; state.myTrainees = [];
+    state.needsNickname = false; state.justAssignedTrainees = []; state.pendingJustAssigned = null;
     state.viewingTraineeUid = null; state.exercises = []; state.sequences = [];
     state.scheduledSessions = []; state.workoutSessions = []; state.activeSession = null;
     state.users = { trainer: { id:null, name:'' }, client: { id:null, name:'' } };
@@ -633,6 +681,16 @@ function renderNicknameScreen() {
     <button data-action="submit-nickname" class="h-12 px-6 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('check','text-[20px]')}Continue</button>
   `);
 }
+function renderJustAssignedScreen() {
+  const names = (state.justAssignedTrainees || []).map(t => t.name);
+  const names1 = names.length > 1 ? names.slice(0,-1).join(', ') + ' and ' + names[names.length-1] : (names[0] || 'A trainee');
+  return renderCenteredScreen(`
+    <div class="w-16 h-16 rounded-2xl bg-primary text-on-primary flex items-center justify-center font-headline-lg text-headline-lg font-bold">${icon('celebration','text-[28px]')}</div>
+    <h1 class="font-headline-lg text-headline-lg text-on-surface">You've been assigned a trainee!</h1>
+    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">${esc(names1)}${names.length>1?' are':' is'} now training with you.</p>
+    <button data-action="dismiss-assigned-trainee" class="h-12 px-6 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('arrow_forward','text-[20px]')}Get Started</button>
+  `);
+}
 function renderNoRoleScreen() {
   return renderCenteredScreen(`
     <h1 class="font-headline-lg text-headline-lg text-on-surface">No role assigned yet</h1>
@@ -660,6 +718,7 @@ function renderInner() {
   if (state.booting) { $('#root').innerHTML = renderLoadingScreen(); return; }
   if (state.notAuthorized) { $('#root').innerHTML = renderNotAuthorizedScreen(); return; }
   if (state.needsNickname) { $('#root').innerHTML = renderNicknameScreen(); return; }
+  if (state.justAssignedTrainees && state.justAssignedTrainees.length) { $('#root').innerHTML = renderJustAssignedScreen(); return; }
   const { path, parts } = route();
   if (!state.viewingTraineeUid && path !== '/admin') { $('#root').innerHTML = renderNoRoleScreen(); return; }
 
@@ -2254,6 +2313,22 @@ async function loadAdminCenterData() {
         });
       }
     }
+    /* trainers who haven't signed in yet can still have pending assignments —
+       made by email, resolved into trainerIndex/traineeIndex automatically the
+       first time that trainer signs in. Surface them the same way so the admin
+       sees what's already queued up. */
+    const pendingSnap = await get(ref(db, 'pendingTrainerAssignments'));
+    const pendingAll = pendingSnap.val() || {};
+    for (const w of wl) {
+      if (w.role === 'trainer' && !w.uid) {
+        const ek = emailKey(w.email);
+        const pendingTraineeUids = Object.keys(pendingAll).filter(tUid => pendingAll[tUid] && pendingAll[tUid][ek]);
+        traineesByTrainer[adminPendingKey(w.email)] = pendingTraineeUids.map(tUid => {
+          const entry = wl.find(x => x.uid === tUid);
+          return { uid: tUid, name: entry ? (entry.nickname || entry.email) : tUid };
+        });
+      }
+    }
     state.ui.adminWhitelist = wl;
     state.ui.adminTraineesByTrainer = traineesByTrainer;
     state.ui.adminLoaded = true;
@@ -2288,7 +2363,8 @@ function renderAdminCenter() {
 }
 function adminUserRow(w) {
   const signedIn = !!w.uid;
-  const trainees = w.role === 'trainer' ? ((state.ui.adminTraineesByTrainer||{})[w.uid] || []) : [];
+  const chipKey = w.uid || adminPendingKey(w.email);
+  const trainees = w.role === 'trainer' ? ((state.ui.adminTraineesByTrainer||{})[chipKey] || []) : [];
   return `
   <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
     <div class="flex items-center justify-between gap-2">
@@ -2297,12 +2373,13 @@ function adminUserRow(w) {
         <p class="font-label-sm text-label-sm text-on-surface-variant truncate">${w.nickname ? esc(w.email)+' • ' : ''}${w.role==='trainer'?'Trainer':'Trainee'}${signedIn?'':' • hasn’t signed in yet'}</p>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
-        ${w.role==='trainer' ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid||''}" data-trainer-email="${esc(w.email)}" ${signedIn?'':'disabled'} title="${signedIn?'':'Waiting for this trainer to sign in at least once'}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1 disabled:opacity-40" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
+        ${w.role==='trainer' ? `<button data-action="open-admin-assign" data-trainer-uid="${w.uid||''}" data-trainer-email="${esc(w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('group_add','text-[16px]')}Assign</button>` : ''}
         ${w.role==='trainee' && signedIn ? `<button data-action="admin-view-as" data-uid="${w.uid}" data-name="${esc(w.nickname || w.email)}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('visibility','text-[16px]')}View</button>` : ''}
         <button data-action="open-admin-remove-user" data-email="${esc(w.email)}" data-uid="${w.uid||''}" data-role="${w.role}" aria-label="Remove ${esc(w.email)}" class="h-9 w-9 rounded-full flex items-center justify-center text-error hover:bg-error-container/40" type="button">${icon('person_remove','text-[18px]')}</button>
       </div>
     </div>
-    ${trainees.length ? `<div class="flex flex-wrap gap-1.5">${trainees.map(t=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(t.name)}</span>`).join('')}</div>` : ''}
+    ${trainees.length ? `<div class="flex flex-wrap gap-1.5">${trainees.map(t=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(t.name)}${signedIn?'':' (pending)'}</span>`).join('')}</div>` : ''}
+    ${trainees.length && !signedIn ? `<p class="font-label-sm text-label-sm text-tertiary">Applies automatically once they sign in.</p>` : ''}
   </div>`;
 }
 function modalAdminAddUser(m) {
@@ -2322,8 +2399,10 @@ function modalAdminAddUser(m) {
 }
 function modalAdminAssign(m) {
   const trainees = (state.ui.adminWhitelist||[]).filter(w => w.role === 'trainee' && w.uid);
-  const current = new Set(((state.ui.adminTraineesByTrainer||{})[m.trainerUid]||[]).map(t=>t.uid));
+  const chipKey = m.trainerUid || adminPendingKey(m.trainerEmail);
+  const current = new Set(((state.ui.adminTraineesByTrainer||{})[chipKey]||[]).map(t=>t.uid));
   return modalShell(`Assign trainees to ${esc(m.trainerEmail)}`, `
+    ${!m.trainerUid ? `<p class="font-label-sm text-label-sm text-tertiary">This trainer hasn't signed in yet — the assignment applies automatically the first time they do.</p>` : ''}
     <div class="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
       ${trainees.length ? trainees.map(t => `
         <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-surface-container-low">
@@ -2392,12 +2471,15 @@ const actions = {
     await update(ref(db, `users/${user.uid}`), { nickname });
     state.authUser.nickname = nickname;
     state.needsNickname = false;
+    state.justAssignedTrainees = state.pendingJustAssigned || [];
+    state.pendingJustAssigned = null;
     state.booting = true; rerender();
     const ek = emailKey(user.email);
     const isAdmin = ADMIN_EMAILS.includes(user.email);
     const wlSnap = await get(ref(db, `whitelist/${ek}`));
     await finishResolveAccess(user, wlSnap.val(), isAdmin);
   },
+  'dismiss-assigned-trainee': () => { state.justAssignedTrainees = []; rerender(); },
   'open-edit-nickname': () => { state.ui.profileMenuOpen = false; state.ui.editNicknameError = null; state.ui.modal = { type: 'edit-nickname' }; rerender(); },
   'edit-nickname-confirm': async () => {
     const el = $('#f-edit-nickname');
@@ -2425,16 +2507,27 @@ const actions = {
     state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
     loadAdminCenterData();
   },
-  'open-admin-assign': (ds) => { if (!ds.trainerUid) return; state.ui.modal = { type: 'admin-assign', trainerUid: ds.trainerUid, trainerEmail: ds.trainerEmail }; rerender(); },
+  'open-admin-assign': (ds) => { state.ui.modal = { type: 'admin-assign', trainerUid: ds.trainerUid || null, trainerEmail: ds.trainerEmail }; rerender(); },
   'admin-assign-confirm': async (ds) => {
-    const trainerUid = ds.trainerUid;
+    const trainerUid = ds.trainerUid || null;
     const boxes = $all('input[data-admin-trainee-uid]');
     const updates = {};
-    boxes.forEach(el => {
-      const tUid = el.dataset.adminTraineeUid;
-      updates[`trainerIndex/${trainerUid}/${tUid}`] = el.checked ? true : null;
-      updates[`traineeIndex/${tUid}/${trainerUid}`] = el.checked ? true : null;
-    });
+    if (trainerUid) {
+      boxes.forEach(el => {
+        const tUid = el.dataset.adminTraineeUid;
+        updates[`trainerIndex/${trainerUid}/${tUid}`] = el.checked ? true : null;
+        updates[`traineeIndex/${tUid}/${trainerUid}`] = el.checked ? true : null;
+      });
+    } else {
+      /* trainer hasn't signed in — no uid to key off yet. Record the pairing by
+         the trainer's email instead; their own first login resolves it into
+         trainerIndex/traineeIndex (see resolvePendingTrainerAssignments). */
+      const ek = emailKey(ds.trainerEmail);
+      boxes.forEach(el => {
+        const tUid = el.dataset.adminTraineeUid;
+        updates[`pendingTrainerAssignments/${tUid}/${ek}`] = el.checked ? true : null;
+      });
+    }
     await update(ref(db), updates);
     state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
     loadAdminCenterData();
@@ -2455,6 +2548,12 @@ const actions = {
         Object.keys(idxSnap.val() || {}).forEach(trainerUid => { updates[`trainerIndex/${trainerUid}/${ds.uid}`] = null; });
         updates[`traineeIndex/${ds.uid}`] = null;
       }
+    } else if (ds.role === 'trainer') {
+      const pendingSnap = await get(ref(db, 'pendingTrainerAssignments'));
+      const pendingAll = pendingSnap.val() || {};
+      Object.keys(pendingAll).forEach(traineeUid => {
+        if (pendingAll[traineeUid] && pendingAll[traineeUid][ek]) updates[`pendingTrainerAssignments/${traineeUid}/${ek}`] = null;
+      });
     }
     await update(ref(db), updates);
     state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();

@@ -10,13 +10,27 @@
       ".read": "auth != null",
       ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
     },
-    "trainerIndex": {
+    "pendingTrainerAssignments": {
       ".read": "auth != null",
       ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
     },
+    "trainerIndex": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')",
+      "$trainerUid": {
+        "$traineeUid": {
+          ".write": "auth != null && auth.uid === $trainerUid && root.child('pendingTrainerAssignments').child($traineeUid).child(auth.token.email.replace('.', ',')).exists()"
+        }
+      }
+    },
     "traineeIndex": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')"
+      ".write": "auth != null && (auth.token.email === 'nurnasuhaa@gmail.com' || auth.token.email === 'shaf.r210003@gmail.com')",
+      "$traineeUid": {
+        "$trainerUid": {
+          ".write": "auth != null && auth.uid === $trainerUid && root.child('pendingTrainerAssignments').child($traineeUid).child(auth.token.email.replace('.', ',')).exists()"
+        }
+      }
     },
     "userData": {
       "$traineeUid": {
