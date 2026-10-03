@@ -1119,14 +1119,14 @@ function modalDiscardConfirm(m) {
     <p class="font-body-md text-body-md text-on-surface-variant">You already have an unfinished workout. Resume it, or discard it and start this one instead?</p>
   `, `
     <button data-action="go" data-href="#/workout" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Resume active workout</button>
-    <button data-action="discard-and-start" data-sequence-id="${m.sequenceId}" data-scheduled-id="${m.scheduledId||''}" class="w-full h-11 rounded-full bg-error-container text-on-error-container font-label-md text-label-md">Discard and start new</button>
+    <button data-action="discard-and-start" data-sequence-id="${m.sequenceId}" data-scheduled-id="${m.scheduledId||''}" data-date="${m.date||''}" class="w-full h-11 rounded-full bg-error-container text-on-error-container font-label-md text-label-md">Discard and start new</button>
   `);
 }
 function modalStartWorkoutPick(m) {
-  return modalShell('Start a Workout', `
+  return modalShell(m.date ? `Log Past Workout — ${fmtShort(m.date)}` : 'Start a Workout', `
     <div class="flex flex-col gap-1.5">
       ${state.sequences.filter(s=>!s.archived && !s.draft).map(s => `
-        <button data-action="start-workout" data-sequence-id="${s.id}" class="w-full text-left px-3 py-3 rounded-lg hover:bg-surface-container-low flex items-center justify-between" type="button">
+        <button data-action="start-workout" data-sequence-id="${s.id}" data-date="${m.date||''}" class="w-full text-left px-3 py-3 rounded-lg hover:bg-surface-container-low flex items-center justify-between" type="button">
           <span>
             <span class="block font-label-lg text-label-lg text-on-surface">${esc(s.name)}</span>
             <span class="block font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises</span>
@@ -1477,7 +1477,9 @@ function renderCalendar() {
   </div>
 
   <div class="flex items-center justify-between gap-space-sm mt-space-md">
-    <button data-action="open-schedule-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('add_circle','text-[20px]')}Schedule Workout</button>
+    ${calSelectedDate < todayISO()
+      ? `<button data-action="open-log-past-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('history_edu','text-[20px]')}Log Past Workout</button>`
+      : `<button data-action="open-schedule-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('add_circle','text-[20px]')}Schedule Workout</button>`}
   </div>
 
   <div class="mt-space-md bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-space-sm">
@@ -1485,7 +1487,7 @@ function renderCalendar() {
       <h3 class="font-title-md text-title-md text-on-surface">${fmtFull(calSelectedDate)}</h3>
       ${calSelectedDate===todayISO() ? pill('Today', 'bg-primary-fixed text-on-primary-fixed') : ''}
     </div>
-    ${selectedList.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">Nothing scheduled. Tap "Schedule Workout" to plan one.</p>` :
+    ${selectedList.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">${calSelectedDate < todayISO() ? 'Nothing logged. Tap "Log Past Workout" to add one.' : 'Nothing scheduled. Tap "Schedule Workout" to plan one.'}</p>` :
       selectedList.map(s => dayDetailCard(s)).join('')}
   </div>
   ` : `
@@ -1822,17 +1824,32 @@ function buildSessionExercise(exerciseId, prescription) {
     restSeconds: p.restSeconds, targetRepLow: p.repLow, targetRepHigh: p.repHigh,
     targetIntensity: p.intensityTarget, sets };
 }
-function beginWorkout(sequenceId, scheduledId) {
+/* "Log Past Workout" (Calendar, a day before today) passes a date but no
+   scheduledId — create a scheduled item for it first so the usual finish-time
+   linking (finalizeActiveSession) flips it to "completed" and the Calendar day
+   view picks it up, same as any other scheduled-then-logged session. Every
+   other caller of start-workout either already has a real scheduledId or
+   passes no date at all (an ad-hoc "Start This Sequence Now"), so this only
+   ever fires for that one flow. */
+function resolveStartScheduledId(ds) {
+  if (ds.scheduledId) return ds.scheduledId;
+  if (!ds.date) return null;
+  const sch = { id: uid('sch'), sequenceId: ds.sequenceId, date: ds.date, plannedBy: state.role, status: 'planned', note: '' };
+  state.scheduledSessions.push(sch);
+  return sch.id;
+}
+function beginWorkout(sequenceId, scheduledId, explicitDate) {
   const seq = getSequence(sequenceId);
   const exercises = seq.exercises.map(sx => buildSessionExercise(sx.exerciseId, sx.prescription));
   /* a workout started from a scheduled item (e.g. catching up on a session
      scheduled for a past date) is logged under THAT date, not whatever day
      you happened to press Start on — otherwise backfilling an old session
-     always showed up as "today" everywhere (Home, Calendar, history). Only
-     an ad-hoc start with no scheduled item (no scheduledId) defaults to today. */
+     always showed up as "today" everywhere (Home, Calendar, history).
+     explicitDate (from "Log Past Workout") takes priority over that; an
+     ad-hoc start with neither defaults to today. */
   const sc = scheduledId ? state.scheduledSessions.find(x => x.id === scheduledId) : null;
   state.activeSession = { id: uid('ws'), sequenceId: seq.id, sequenceName: seq.name, scheduledSessionId: scheduledId,
-    date: sc ? sc.date : todayISO(), startedAt: Date.now(), performedBy: state.role, exercises };
+    date: explicitDate || (sc ? sc.date : todayISO()), startedAt: Date.now(), performedBy: state.role, exercises };
   saveState(); navigate('#/workout');
 }
 /* true when the live session's exercises (swapped/added mid-session) no longer match the sequence it started from */
@@ -2701,6 +2718,7 @@ const actions = {
     state.ui.modal = { type: 'schedule', date: state.ui.calSelectedDate, pickerYear: d.getFullYear(), pickerMonth: d.getMonth(), sequenceId: first ? first.id : null, note: '' };
     rerender();
   },
+  'open-log-past-modal': () => { state.ui.modal = { type: 'start-workout-pick', date: state.ui.calSelectedDate }; rerender(); },
   'open-reschedule': (ds) => {
     const sc = state.scheduledSessions.find(x => x.id === ds.id);
     const d = new Date(sc.date + 'T00:00:00');
@@ -2736,10 +2754,10 @@ const actions = {
 
   'open-start-picker': () => { state.ui.modal = { type: 'start-workout-pick' }; rerender(); },
   'start-workout': (ds) => {
-    if (state.activeSession) { state.ui.modal = { type: 'discard-confirm', sequenceId: ds.sequenceId, scheduledId: ds.scheduledId || null }; rerender(); return; }
-    state.ui.modal = null; beginWorkout(ds.sequenceId, ds.scheduledId || null);
+    if (state.activeSession) { state.ui.modal = { type: 'discard-confirm', sequenceId: ds.sequenceId, scheduledId: ds.scheduledId || null, date: ds.date || null }; rerender(); return; }
+    state.ui.modal = null; beginWorkout(ds.sequenceId, resolveStartScheduledId(ds), ds.date || null);
   },
-  'discard-and-start': (ds) => { state.activeSession = null; state.ui.modal = null; beginWorkout(ds.sequenceId, ds.scheduledId || null); },
+  'discard-and-start': (ds) => { state.activeSession = null; state.ui.modal = null; beginWorkout(ds.sequenceId, resolveStartScheduledId(ds), ds.date || null); },
   'open-finish': () => { state.ui.modal = { type: 'finish-workout' }; rerender(); },
   'finish-workout-confirm': () => {
     if (sessionCustomized(state.activeSession)) { state.ui.modal = { type: 'finish-save-choice' }; rerender(); return; }
