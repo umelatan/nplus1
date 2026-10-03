@@ -201,10 +201,11 @@ function freshUiState() {
   return {
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
     historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null,
-    libSearch:'', libCategory:'all', modal:null, expandedSeqExIdx:null, expandedHistorySessionId:null,
+    libSearch:'', libCategory:'all', modal:null, expandedHistorySessionId:null,
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
+    seqDirty:false, seqDirtyFor:null, toast:null,
     theme,
   };
 }
@@ -798,8 +799,16 @@ function renderInner() {
     </main>
     ${renderBottomNav(navKey)}
     ${renderModal()}
+    ${renderToast()}
   `;
   $('#root').innerHTML = `<div class="min-h-screen flex flex-col bg-surface text-on-surface">${html}</div>`;
+}
+function renderToast() {
+  if (!state.ui.toast) return '';
+  return `<div class="fixed left-1/2 -translate-x-1/2 z-[60] font-label-md text-label-md font-medium text-on-surface bg-surface-container-high shadow-lg rounded-full px-4 py-2.5 flex items-center gap-2" style="bottom: calc(5rem + env(safe-area-inset-bottom, 0px) + 0.5rem);">
+    ${icon('check_circle','text-[18px] text-primary')}
+    ${esc(state.ui.toast.message)}
+  </div>`;
 }
 
 function renderResumeBar() {
@@ -1692,6 +1701,7 @@ function sequenceCard(s, isTrainer) {
 function renderSequenceDetail(seqId) {
   const s = getSequence(seqId);
   if (!s) return `<p class="text-on-surface-variant">Sequence not found.</p>`;
+  if (state.ui.seqDirtyFor !== seqId) { state.ui.seqDirtyFor = seqId; state.ui.seqDirty = false; }
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   const isDraft = !!s.draft;
   const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
@@ -1714,12 +1724,16 @@ function renderSequenceDetail(seqId) {
   ${isRenaming && state.ui.inlineRenameError ? `<p class="font-label-sm text-label-sm text-error mb-1 pl-11 flex items-center gap-1">${icon('error','text-[14px]')}${esc(state.ui.inlineRenameError)}</p>` : ''}
   <p class="font-body-md text-body-md text-on-surface-variant mb-space-md">${esc(s.description||'')}</p>
 
-  <div class="flex flex-col gap-space-sm">
+  <div class="flex flex-col gap-space-sm" data-seq-rows="${s.id}">
     ${s.exercises.map((sx, i) => sequenceExerciseRow(s, sx, i, isTrainer)).join('')}
   </div>
 
   ${isTrainer ? `
   <button data-action="open-add-exercise" data-seq-id="${s.id}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-md" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>
+  ` : ''}
+
+  ${(isTrainer && !isDraft && state.ui.seqDirty) ? `
+  <button data-action="save-sequence-changes" data-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm" type="button">${icon('check_circle','text-[20px]')}Save Changes</button>
   ` : ''}
 
   ${isDraft ? `
@@ -1751,21 +1765,19 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
   const ex = getExercise(sx.exerciseId);
   if (!ex) return '';
   const p = sx.prescription;
-  const expanded = state.ui.expandedSeqExIdx === idx;
-  const loggedDrops = expanded ? lastLoggedDropsFor(ex.id) : null;
+  const loggedDrops = lastLoggedDropsFor(ex.id);
   return `
-  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-    <button data-action="toggle-seq-ex" data-idx="${idx}" class="w-full p-3.5 flex items-center justify-between gap-2 text-left" type="button">
-      <div class="flex items-center gap-3 min-w-0">
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden" data-drag-idx="${idx}">
+    <div class="w-full p-3.5 flex items-center gap-2 text-left">
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        ${isTrainer ? `<span data-drag-handle data-seq-id="${seq.id}" data-idx="${idx}" style="touch-action:none" class="touch-none w-8 h-8 -ml-1 rounded-full flex items-center justify-center text-on-surface-variant cursor-grab active:cursor-grabbing flex-shrink-0">${icon('drag_indicator','text-[20px]')}</span>` : ''}
         <span class="w-7 h-7 rounded-full bg-surface-container text-on-surface flex items-center justify-center font-label-md text-label-md font-bold flex-shrink-0">${idx+1}</span>
         <div class="min-w-0">
           <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(ex.name)}</h4>
           <p class="font-label-sm text-label-sm text-on-surface-variant">${p.sets} sets • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'}${p.drops.length?` • +${p.drops.length} drop${p.drops.length>1?'s':''}`:''}</p>
         </div>
       </div>
-      ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
-    </button>
-    ${expanded ? `
+    </div>
     <div class="px-3.5 pb-3.5 flex flex-col gap-3 border-t border-outline-variant/30 pt-3">
       ${isTrainer ? `
       <div class="grid grid-cols-2 gap-2">
@@ -1807,13 +1819,10 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
           </div>`).join('')}
         <button data-action="add-drop-preset" data-seq-id="${seq.id}" data-idx="${idx}" class="self-start h-8 px-3 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('add','text-[14px]')}Add drop</button>
       </div>
-      <div class="flex items-center gap-2 pt-1">
-        <button data-action="move-exercise" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="-1" ${idx===0?'disabled':''} class="h-9 w-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface disabled:opacity-30" type="button">${icon('north','text-[16px]')}</button>
-        <button data-action="move-exercise" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="1" ${idx===seq.exercises.length-1?'disabled':''} class="h-9 w-9 rounded-full bg-surface-container flex items-center justify-center text-on-surface disabled:opacity-30" type="button">${icon('south','text-[16px]')}</button>
-        <span class="flex-1"></span>
+      <div class="flex items-center justify-end pt-1">
         <button data-action="remove-exercise" data-seq-id="${seq.id}" data-idx="${idx}" class="h-9 px-3 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('delete','text-[16px]')}Remove</button>
       </div>` : ''}
-    </div>` : ''}
+    </div>
   </div>`;
 }
 function seqIdx(id) { return state.sequences.findIndex(s=>s.id===id); }
@@ -2666,6 +2675,14 @@ function restoreFocus(info) {
 }
 function rerender() { const f = captureFocus(); render(); restoreFocus(f); }
 
+let toastTimer = null;
+function showToast(message) {
+  state.ui.toast = { message };
+  rerender();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { state.ui.toast = null; rerender(); }, 2500);
+}
+
 /* ================= ACTIONS ================= */
 const actions = {
   'go': (ds) => navigate(ds.href),
@@ -2973,13 +2990,13 @@ const actions = {
     getSequence(ds.id).name = name;
     state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
   },
-  'toggle-seq-ex': (ds) => { const idx = Number(ds.idx); state.ui.expandedSeqExIdx = state.ui.expandedSeqExIdx === idx ? null : idx; rerender(); },
   'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
   'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
+  'save-sequence-changes': () => { state.ui.seqDirty = false; showToast('Changes saved'); },
   'add-exercise-confirm': (ds) => {
     const seq = getSequence(ds.seqId), ex = getExercise(ds.exerciseId);
     seq.exercises.push(sequenceExerciseFromLibrary(ex));
-    state.ui.modal = null; saveState(); rerender();
+    state.ui.modal = null; state.ui.seqDirty = true; saveState(); rerender();
   },
   'open-add-exercise-session': () => { state.ui.modal = { type: 'session-exercise-picker', mode: 'add', q: '' }; rerender(); },
   'open-swap-exercise-session': (ds) => { state.ui.modal = { type: 'session-exercise-picker', mode: 'swap', exIdx: Number(ds.exIdx), q: '' }; rerender(); },
@@ -3040,17 +3057,17 @@ const actions = {
     } : null;
     if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, sessionPrescription)); }
     else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, sessionPrescription); }
-    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); }
+    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); state.ui.seqDirty = true; }
     state.ui.modal = null; saveState(); rerender();
   },
-  'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
-  'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; saveState(); rerender(); },
-  'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; saveState(); rerender(); },
+  'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
+  'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
+  'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
   'step-sequence-sets': (ds) => {
     const p = getSequence(ds.seqId).exercises[Number(ds.idx)].prescription;
     const cur = Number(p.sets) || 0;
     p.sets = Math.max(1, cur + Number(ds.dir));
-    saveState(); rerender();
+    state.ui.seqDirty = true; saveState(); rerender();
   },
   'step-input': (ds) => {
     const el = document.getElementById(ds.target);
@@ -3059,15 +3076,16 @@ const actions = {
     const next = Math.max(0, cur + Number(ds.dir));
     el.value = next === 0 ? '' : String(next);
   },
-  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); saveState(); rerender(); },
-  'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
-  'move-exercise': (ds) => {
-    const seq = getSequence(ds.seqId), idx = Number(ds.idx), j = idx + Number(ds.dir);
-    if (j < 0 || j >= seq.exercises.length) return;
-    [seq.exercises[idx], seq.exercises[j]] = [seq.exercises[j], seq.exercises[idx]];
-    state.ui.expandedSeqExIdx = j; saveState(); rerender();
+  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); state.ui.seqDirty = true; saveState(); rerender(); },
+  'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); state.ui.seqDirty = true; saveState(); rerender(); },
+  'reorder-exercise': (ds) => {
+    const seq = getSequence(ds.seqId), from = Number(ds.fromIdx), to = Number(ds.toIdx);
+    if (from === to || from < 0 || to < 0 || from >= seq.exercises.length || to >= seq.exercises.length) return;
+    const [item] = seq.exercises.splice(from, 1);
+    seq.exercises.splice(to, 0, item);
+    state.ui.seqDirty = true; saveState(); rerender();
   },
-  'remove-exercise': (ds) => { getSequence(ds.seqId).exercises.splice(Number(ds.idx), 1); state.ui.expandedSeqExIdx = null; saveState(); rerender(); },
+  'remove-exercise': (ds) => { getSequence(ds.seqId).exercises.splice(Number(ds.idx), 1); state.ui.seqDirty = true; saveState(); rerender(); },
 
   'lib-filter-cat': (ds) => { state.ui.libCategory = ds.cat; rerender(); },
   'history-tab': (ds) => { state.ui.historyTab = ds.tab; rerender(); },
@@ -3153,6 +3171,7 @@ document.addEventListener('input', (e) => {
       val = raw === '' ? null : (/\.$/.test(raw) ? raw : Number(raw));
     }
     setPath(state, el.dataset.bind, val);
+    if (el.dataset.bind.startsWith('sequences.')) state.ui.seqDirty = true;
     /* unilateral weight entry: duplicate onto the other side as a convenience
        (most dumbbell/single-limb work uses the same load both sides) — but
        only while that side hasn't been typed into directly, so correcting it
@@ -3223,6 +3242,74 @@ document.addEventListener('change', (e) => {
     const fn = actions[el.dataset.action];
     if (fn) fn(el.dataset, el);
   }
+});
+
+/* ---- sequence exercise reordering (pointer-based: works for touch + mouse) ----
+   Only the dragged row is transformed during the gesture; every other row's
+   bounding rect, captured once at pointerdown, never changes (CSS transforms
+   don't trigger reflow) so comparing the dragged row's live center against
+   those cached midpoints stays accurate without re-querying the DOM. */
+let seqDragCtx = null;
+document.addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('[data-drag-handle]');
+  if (!handle) return;
+  const seqId = handle.dataset.seqId;
+  const fromIdx = Number(handle.dataset.idx);
+  const rows = Array.from(document.querySelectorAll(`[data-seq-rows="${seqId}"] > [data-drag-idx]`));
+  const row = rows[fromIdx];
+  if (!row) return;
+  e.preventDefault();
+  seqDragCtx = {
+    seqId, fromIdx, curIdx: fromIdx, startY: e.clientY, rows,
+    tops: rows.map(r => r.getBoundingClientRect().top),
+    heights: rows.map(r => r.offsetHeight),
+  };
+  row.style.position = 'relative';
+  row.style.zIndex = '50';
+  row.classList.add('shadow-lg');
+});
+document.addEventListener('pointermove', (e) => {
+  if (!seqDragCtx) return;
+  e.preventDefault();
+  const { rows, tops, heights, fromIdx } = seqDragCtx;
+  const dy = e.clientY - seqDragCtx.startY;
+  rows[fromIdx].style.transform = `translateY(${dy}px)`;
+  const draggedCenter = tops[fromIdx] + heights[fromIdx] / 2 + dy;
+  let newIdx = seqDragCtx.curIdx;
+  if (dy > 0) {
+    for (let i = fromIdx + 1; i < rows.length; i++) {
+      if (draggedCenter > tops[i] + heights[i] / 2) newIdx = i; else break;
+    }
+  } else if (dy < 0) {
+    for (let i = fromIdx - 1; i >= 0; i--) {
+      if (draggedCenter < tops[i] + heights[i] / 2) newIdx = i; else break;
+    }
+  } else {
+    newIdx = fromIdx;
+  }
+  if (newIdx !== seqDragCtx.curIdx) {
+    seqDragCtx.curIdx = newIdx;
+    rows.forEach((r, i) => {
+      if (i === fromIdx) return;
+      let shift = 0;
+      if (newIdx > fromIdx && i > fromIdx && i <= newIdx) shift = -heights[fromIdx];
+      else if (newIdx < fromIdx && i < fromIdx && i >= newIdx) shift = heights[fromIdx];
+      r.style.transition = 'transform 120ms ease';
+      r.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  }
+}, { passive: false });
+document.addEventListener('pointerup', () => {
+  if (!seqDragCtx) return;
+  const { seqId, fromIdx, curIdx, rows } = seqDragCtx;
+  rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; r.style.position = ''; r.style.zIndex = ''; r.classList.remove('shadow-lg'); });
+  seqDragCtx = null;
+  if (curIdx !== fromIdx) actions['reorder-exercise']({ seqId, fromIdx: String(fromIdx), toIdx: String(curIdx) });
+});
+document.addEventListener('pointercancel', () => {
+  if (!seqDragCtx) return;
+  seqDragCtx.rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; r.style.position = ''; r.style.zIndex = ''; r.classList.remove('shadow-lg'); });
+  seqDragCtx = null;
 });
 
 /* ================= TICKERS ================= */
