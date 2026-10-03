@@ -1678,9 +1678,6 @@ function dayDetailCard(s, opts) {
         ${s.status==='planned' ? `<button data-action="open-cancel-scheduled" data-id="${s.id}" aria-label="Cancel scheduled session" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container transition-colors" type="button">${icon('close','text-[18px]')}</button>` : ''}
       </div>
     </div>
-    <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
-      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(plannedByDisplay(s))}</span>
-    </div>
     <div class="flex flex-col gap-1 mt-1">
       ${sequenceExerciseListRows(seq.exercises)}
     </div>
