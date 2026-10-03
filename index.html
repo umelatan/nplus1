@@ -1123,7 +1123,7 @@ function modalDiscardConfirm(m) {
   `);
 }
 function modalStartWorkoutPick(m) {
-  return modalShell(m.date ? `Log Past Workout — ${fmtShort(m.date)}` : 'Start a Workout', `
+  return modalShell(m.date ? `Log Workout — ${fmtShort(m.date)}` : 'Start a Workout', `
     <div class="flex flex-col gap-1.5">
       ${state.sequences.filter(s=>!s.archived && !s.draft).map(s => `
         <button data-action="start-workout" data-sequence-id="${s.id}" data-date="${m.date||''}" class="w-full text-left px-3 py-3 rounded-lg hover:bg-surface-container-low flex items-center justify-between" type="button">
@@ -1478,7 +1478,7 @@ function renderCalendar() {
 
   <div class="flex items-center justify-between gap-space-sm mt-space-md">
     ${calSelectedDate < todayISO()
-      ? `<button data-action="open-log-past-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('history_edu','text-[20px]')}Log Past Workout</button>`
+      ? `<button data-action="open-log-past-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('history_edu','text-[20px]')}Log Workout</button>`
       : `<button data-action="open-schedule-modal" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm" type="button">${icon('add_circle','text-[20px]')}Schedule Workout</button>`}
   </div>
 
@@ -1487,7 +1487,7 @@ function renderCalendar() {
       <h3 class="font-title-md text-title-md text-on-surface">${fmtFull(calSelectedDate)}</h3>
       ${calSelectedDate===todayISO() ? pill('Today', 'bg-primary-fixed text-on-primary-fixed') : ''}
     </div>
-    ${selectedList.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">${calSelectedDate < todayISO() ? 'Nothing logged. Tap "Log Past Workout" to add one.' : 'Nothing scheduled. Tap "Schedule Workout" to plan one.'}</p>` :
+    ${selectedList.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">${calSelectedDate < todayISO() ? 'Nothing logged. Tap "Log Workout" to add one.' : 'Nothing scheduled. Tap "Schedule Workout" to plan one.'}</p>` :
       selectedList.map(s => dayDetailCard(s)).join('')}
   </div>
   ` : `
