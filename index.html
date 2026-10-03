@@ -896,6 +896,7 @@ function renderModal() {
   let inner = '';
   if (m.type === 'schedule') inner = modalSchedule(m);
   else if (m.type === 'reschedule') inner = modalReschedule(m);
+  else if (m.type === 'edit-session-date') inner = modalEditSessionDate(m);
   else if (m.type === 'swap-sequence') inner = modalSwapSequence(m);
   else if (m.type === 'add-exercise-to-sequence') inner = modalAddExerciseToSequence(m);
   else if (m.type === 'session-exercise-picker') inner = modalSessionExercisePicker(m);
@@ -992,6 +993,14 @@ function modalReschedule(m) {
       ${miniDatePicker(m)}
     </div>
   `, `<button data-action="reschedule-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save new date</button>`);
+}
+function modalEditSessionDate(m) {
+  return modalShell('Workout Date', `
+    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">Backfilling a past workout? Pick the day it actually happened.</p>
+    <div class="flex flex-col gap-1">
+      ${miniDatePicker(m)}
+    </div>
+  `, `<button data-action="edit-session-date-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Date</button>`);
 }
 function modalSwapSequence(m) {
   const opts = state.sequences.filter(s=>!s.archived && !s.draft).map(s=>`<option value="${s.id}" ${s.id===m.sequenceId?'selected':''}>${esc(s.name)}</option>`).join('');
@@ -1879,7 +1888,10 @@ function renderActiveWorkout() {
       <div class="min-w-0">
         <div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-semibold">Active Session</span></div>
         <h2 class="font-headline-md text-headline-md text-on-surface truncate">${esc(s.sequenceName)}</h2>
-        <p class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${s.exercises.length} exercises • Logged by ${esc(roleName(s.performedBy))}</p>
+        <p class="font-label-sm text-label-sm text-on-surface-variant">
+          <button data-action="open-edit-session-date" class="underline decoration-dotted text-on-surface-variant" type="button">${fmtShort(s.date)}</button>
+          • ${s.exercises.length} exercises • Logged by ${esc(roleName(s.performedBy))}
+        </p>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
         <button data-action="open-cancel-session" aria-label="Cancel session" class="min-h-[48px] min-w-[48px] w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container rounded-full transition-colors" type="button">${icon('close','text-[20px]')}</button>
@@ -2699,6 +2711,16 @@ const actions = {
     state.ui.calSelectedDate = date; state.ui.modal = null; saveState(); rerender();
   },
   'reschedule-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.date = state.ui.modal.date; state.ui.modal = null; saveState(); rerender(); },
+  'open-edit-session-date': () => {
+    const s = state.activeSession;
+    const d = new Date(s.date + 'T00:00:00');
+    state.ui.modal = { type: 'edit-session-date', date: s.date, pickerYear: d.getFullYear(), pickerMonth: d.getMonth() };
+    rerender();
+  },
+  'edit-session-date-confirm': () => {
+    state.activeSession.date = state.ui.modal.date;
+    state.ui.modal = null; saveState(); rerender();
+  },
   'swap-sequence-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.sequenceId = $('#f-seq').value; state.ui.modal = null; saveState(); rerender(); },
 
   'open-start-picker': () => { state.ui.modal = { type: 'start-workout-pick' }; rerender(); },
