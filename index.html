@@ -738,7 +738,7 @@ function editedSeqNavGuard() {
   if (state.ui.seqSnapshot === seqDirtySignature(seq)) return null;
   return seq;
 }
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
 window.addEventListener('DOMContentLoaded', () => { applyTheme(); render(); });
 window.addEventListener('beforeunload', (e) => { if (state.activeSession) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -1194,14 +1194,14 @@ function modalNewExercise(m) {
       </label>
     </div>
     <div class="grid grid-cols-2 gap-3">
-      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default sets <span class="text-on-surface-variant/60">(optional)</span></span>
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Sets <span class="text-on-surface-variant/60">(optional)</span></span>
         <div class="flex items-center gap-1">
           <button data-action="step-input" data-target="nf-sets" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
           <input id="nf-sets" type="text" inputmode="numeric" value="0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
           <button data-action="step-input" data-target="nf-sets" data-dir="1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
         </div>
       </label>
-      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
+      <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
         <div class="flex items-center gap-1">
           <button data-action="step-input" data-target="nf-drops" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
           <input id="nf-drops" type="text" inputmode="numeric" value="0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
@@ -1209,7 +1209,7 @@ function modalNewExercise(m) {
         </div>
       </label>
     </div>
-    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">If left blank, this gets added to a sequence with 1 set and no drop sets — editable later as usual.</p>
+    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">Sets/drops set here only apply to where you're adding this exercise right now — editable later as usual, and won't carry over elsewhere this exercise gets used.</p>
   `, `<button data-action="new-exercise-save" data-seq-id="${m.seqId||''}" data-mode="${m.mode||''}" data-ex-idx="${m.exIdx ?? ''}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Exercise</button>`);
 }
 function modalFinishWorkout(m) {
@@ -2035,16 +2035,25 @@ function convertSetLaterality(set, toUnilateral) {
     set.intensityValue = set.intensityValueLeft ?? set.intensityValueRight ?? null;
   }
 }
-function buildSessionExercise(exerciseId, prescription) {
+function buildSessionExercise(exerciseId, prescription, fromSequence) {
   const ex = getExercise(exerciseId);
   const p = prescription || { sets: 1, drops: [], intensityMethod: 'rpe', notes: '', restSeconds: null, repLow: null, repHigh: null, intensityTarget: null };
   const prev = findPreviousExerciseBlock(exerciseId, null);
   const prevSets = prev ? prev.block.sets : null;
-  const setCount = prevSets ? prevSets.length : p.sets;
+  /* starting a workout FROM a sequence: that sequence's own prescribed set
+     count always wins, never history — the same exercise can be prescribed
+     a different number of sets in a different sequence, and carrying over
+     whatever set count happened last time (possibly from a totally different
+     sequence) would silently override what this sequence actually calls for.
+     Ad-hoc additions mid-session (no sequence prescription available) still
+     fall back to "however many sets you did last time" as a reasonable guess. */
+  const setCount = fromSequence ? p.sets : (prevSets ? prevSets.length : p.sets);
   const sets = [];
   for (let i=0;i<setCount;i++) {
     const set = { id: uid('set'), type:'working', weight:null, weightLeft:null, weightRight:null, reps:null, repsLeft:null, repsRight:null, intensityMethod: p.intensityMethod, intensityValue:null, intensityMethodLeft: p.intensityMethod, intensityValueLeft:null, intensityMethodRight: p.intensityMethod, intensityValueRight:null, note:'', completed:false, drops:[] };
-    const dropCount = prevSets ? (prevSets[i] ? prevSets[i].drops.length : 0) : (i === setCount-1 ? p.drops.length : 0);
+    const dropCount = fromSequence
+      ? (i === setCount-1 ? p.drops.length : 0)
+      : (prevSets ? (prevSets[i] ? prevSets[i].drops.length : 0) : (i === setCount-1 ? p.drops.length : 0));
     if (dropCount) {
       set.drops = Array.from({length: dropCount}, () => ({ id: uid('set'), type:'drop', weight:null, weightLeft:null, weightRight:null, reps:null, repsLeft:null, repsRight:null, intensityMethod: p.intensityMethod, intensityValue:null, intensityMethodLeft: p.intensityMethod, intensityValueLeft:null, intensityMethodRight: p.intensityMethod, intensityValueRight:null, note:'', completed:false }));
     }
@@ -2071,7 +2080,7 @@ function resolveStartScheduledId(ds) {
 }
 function beginWorkout(sequenceId, scheduledId, explicitDate) {
   const seq = getSequence(sequenceId);
-  const exercises = seq.exercises.map(sx => buildSessionExercise(sx.exerciseId, sx.prescription));
+  const exercises = seq.exercises.map(sx => buildSessionExercise(sx.exerciseId, sx.prescription, true));
   /* a workout started from a scheduled item (e.g. catching up on a session
      scheduled for a past date) is logged under THAT date, not whatever day
      you happened to press Start on — otherwise backfilling an old session
@@ -2090,8 +2099,9 @@ function sessionCustomized(s) {
   const a = seq.exercises.map(sx => sx.exerciseId), b = s.exercises.map(e => e.exerciseId);
   return a.length !== b.length || a.some((id, i) => id !== b[i]);
 }
-/* a fresh sequence-exercise entry for adding ex to a sequence, seeded from its own
-   default sets/drop-sets if it has any (set at creation time, optional) */
+/* a fresh sequence-exercise entry for adding an existing library exercise to
+   a sequence — starts at 1 set, no drops; sets/drops are per-sequence, not an
+   exercise-level default, so the trainer sets them here via the stepper. */
 /* a blank prescription drop slot. Must carry a non-null field (id) — the Realtime
    Database treats any key with a null value as a delete, so an object left with
    nothing but weight:null, reps:null ends up with zero children once written and
@@ -2100,11 +2110,10 @@ function sessionCustomized(s) {
    across a sync round trip even before weight/reps are ever filled in. */
 function emptyPrescriptionDrop() { return { id: uid('drop'), weight: null, reps: null }; }
 function sequenceExerciseFromLibrary(ex) {
-  const dropCount = ex.defaultDropCount || 0;
   return { id: uid('sqx'), exerciseId: ex.id, prescription: {
-    sets: ex.defaultSets || 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null,
+    sets: 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null,
     intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '',
-    drops: Array.from({length: dropCount}, emptyPrescriptionDrop)
+    drops: []
   }};
 }
 /* turns a live session exercise block into a sequence prescription, so "update the sequence" can persist what was actually done */
@@ -2378,8 +2387,14 @@ function intensityBadgeHtml(set, isUni) {
   const isFail = isUni ? (set.intensityValueLeft==='failure'||set.intensityValueRight==='failure') : set.intensityValue === 'failure';
   return `<span class="font-bold ${isFail ? 'text-tertiary' : 'text-on-surface'}">${label}</span>`;
 }
-function tableDataRow({ label, labelSub, badge, weight, weightUnit, reps, noteBadge, dim, href }) {
+function tableDataRow({ label, labelSub, badge, weight, weightUnit, weightHtml, reps, noteBadge, dim, href }) {
   const Tag = href ? 'a' : 'div';
+  /* weightHtml (unilateral: separate L/R lines) overrides the plain single-value
+     weight formatting below — a single "L60/R65" string in this narrow column
+     has no room to also show a unit and reliably gets clipped, so stacking L
+     and R on their own lines instead of cramming them onto one avoids the cutoff. */
+  const weightCell = weightHtml != null ? weightHtml
+    : `${weight != null ? weight : '–'}${(weight != null && weightUnit) ? `<span class="text-[9px] font-medium text-on-surface-variant ml-0.5">${weightUnit}</span>` : ''}`;
   return `<${Tag} ${href ? `href="${href}"` : ''} class="grid ${SESSION_TABLE_COLS} gap-2.5 px-2.5 py-2 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
     <div class="min-w-0">
       <div class="flex items-center gap-1 flex-wrap">
@@ -2388,7 +2403,7 @@ function tableDataRow({ label, labelSub, badge, weight, weightUnit, reps, noteBa
       </div>
       ${labelSub ? `<span class="block font-label-sm text-label-sm text-on-surface-variant truncate">${labelSub}</span>` : ''}
     </div>
-    <div class="min-w-0 truncate text-[15px] font-bold text-on-surface text-right leading-tight">${weight != null ? weight : '–'}${(weight != null && weightUnit) ? `<span class="text-[9px] font-medium text-on-surface-variant ml-0.5">${weightUnit}</span>` : ''}</div>
+    <div class="min-w-0 text-[15px] font-bold text-on-surface text-right leading-tight">${weightCell}</div>
     <div class="min-w-0 truncate text-right"><span class="font-label-md text-label-md text-on-surface">${reps}</span></div>
     <div class="font-label-sm text-label-sm text-on-surface-variant min-w-0 truncate text-right">${noteBadge || '–'}</div>
   </${Tag}>`;
@@ -2417,10 +2432,13 @@ function renderSessionTable(session) {
     const rows = flat.map(({ set, isDrop }) => {
       if (!isDrop) workingIdx++;
       const reps = isUni ? `L${set.repsLeft ?? '–'}/R${set.repsRight ?? '–'}` : `${set.reps ?? '–'}`;
+      const weightHtml = isUni
+        ? `<div class="leading-tight"><div class="truncate">L${set.weightLeft ?? '–'}</div><div class="truncate">R${set.weightRight ?? '–'}</div></div>`
+        : null;
       return tableDataRow({
         label: isDrop ? '↳ Drop' : `Set ${workingIdx}`,
         labelSub: (!isDrop && set.type === 'warmup') ? 'Warm-up' : null,
-        weight: isUni ? `L${set.weightLeft ?? '–'}/R${set.weightRight ?? '–'}` : set.weight,
+        weight: isUni ? null : set.weight, weightHtml,
         weightUnit: isUni ? null : unit, reps, noteBadge: intensityBadgeHtml(set, isUni), dim: isDrop,
       });
     }).join('');
@@ -2498,6 +2516,8 @@ function renderHistory() {
   const filterMonth = (state.ui.historyFilterMonth === 'all' || months.includes(state.ui.historyFilterMonth)) ? state.ui.historyFilterMonth : 'all';
   const viewMode = filterMonth === 'all' ? 'all' : 'month';
   const exCat = state.ui.historyExerciseCategory || 'all';
+  const exList = state.exercises.filter(e => exCat==='all' || e.category===exCat);
+  const allExercisesExpanded = exList.length > 0 && exList.every(e => state.ui.historyExpandedExerciseIds[e.id]);
   return `
   <div id="history-sticky-header" class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <div class="flex items-center justify-between pb-2">
@@ -2512,7 +2532,8 @@ function renderHistory() {
       <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
         <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
         <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
-      </div>` : ''}
+      </div>` : `
+      <button data-action="toggle-collapse-all-history-exercises" class="h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1 flex-shrink-0" type="button">${icon(allExercisesExpanded?'unfold_less':'unfold_more','text-[16px]')}${allExercisesExpanded?'Collapse All':'Expand All'}</button>`}
     </div>
     ${tab==='exercises' ? `
     <div class="flex items-center gap-2 overflow-x-auto pb-1">
@@ -2640,13 +2661,8 @@ function renderHistoryExercisePicker() {
   if (!state.exercises.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No exercises yet — add some from the Library.</p>`;
   const cat = state.ui.historyExerciseCategory || 'all';
   const list = state.exercises.filter(e => cat==='all' || e.category===cat);
-  const allExpanded = list.length > 0 && list.every(e => state.ui.historyExpandedExerciseIds[e.id]);
   return `
   ${renderBestProgressHighlight()}
-  ${list.length > 1 ? `
-  <div class="flex justify-end mb-2">
-    <button data-action="toggle-collapse-all-history-exercises" class="h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon(allExpanded?'unfold_less':'unfold_more','text-[16px]')}${allExpanded?'Collapse All':'Expand All'}</button>
-  </div>` : ''}
   <div class="flex flex-col gap-space-sm">
     ${list.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">No exercises in this category.</p>` :
       list.map(e => {
@@ -3412,18 +3428,30 @@ const actions = {
     const name = $('#nf-name').value.trim(); if (!name) return;
     const setsVal = $('#nf-sets').value.trim();
     const dropsVal = $('#nf-drops').value.trim();
-    const defaultSets = setsVal ? (Math.max(1, Math.round(Number(setsVal))) || 1) : null;
-    const defaultDropCount = dropsVal ? (Math.max(0, Math.round(Number(dropsVal))) || 0) : null;
-    const ex = { id: uid('ex'), name, category: $('#nf-category').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, defaultSets, defaultDropCount, notes: '', custom: true };
+    /* sets/drops typed here are NOT stored on the exercise itself — how many
+       sets an exercise gets is a property of wherever it's being prescribed
+       (a specific sequence, or this one active session), not of the exercise
+       as a shared library item. The same exercise reused in a different
+       sequence starts fresh and is set there independently. */
+    const sets = setsVal ? (Math.max(1, Math.round(Number(setsVal))) || 1) : null;
+    const dropCount = dropsVal ? (Math.max(0, Math.round(Number(dropsVal))) || 0) : null;
+    const ex = { id: uid('ex'), name, category: $('#nf-category').value, laterality: $('#nf-laterality').value, loadType: $('#nf-loadtype').value, defaultRepLow: 8, defaultRepHigh: 12, notes: '', custom: true };
     state.exercises.push(ex);
-    const sessionPrescription = (defaultSets || defaultDropCount) ? {
-      sets: defaultSets || 1, repLow: null, repHigh: null, targetWeight: null, intensityMethod: 'rpe',
+    const sessionPrescription = (sets || dropCount) ? {
+      sets: sets || 1, repLow: null, repHigh: null, targetWeight: null, intensityMethod: 'rpe',
       intensityTarget: null, restSeconds: null, notes: '',
-      drops: Array.from({length: defaultDropCount||0}, emptyPrescriptionDrop),
+      drops: Array.from({length: dropCount||0}, emptyPrescriptionDrop),
     } : null;
     if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, sessionPrescription)); }
     else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, sessionPrescription); }
-    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); }
+    else if (ds.seqId) {
+      const seq = getSequence(ds.seqId);
+      seq.exercises.push({ id: uid('sqx'), exerciseId: ex.id, prescription: {
+        sets: sets || 1, repLow: ex.defaultRepLow, repHigh: ex.defaultRepHigh, targetWeight: null,
+        intensityMethod: 'rpe', intensityTarget: 8, restSeconds: 75, notes: '',
+        drops: Array.from({length: dropCount||0}, emptyPrescriptionDrop),
+      }});
+    }
     state.ui.modal = null; saveState(); rerender();
   },
   'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
