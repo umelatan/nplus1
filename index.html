@@ -222,7 +222,7 @@ function freshUiState() {
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
-    seqDirty:false, seqDirtyFor:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{},
+    seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{},
     theme,
   };
 }
@@ -504,6 +504,12 @@ function otherRole() { return state.role === 'client' ? 'trainer' : 'client'; }
 function currentUser() { return state.users[state.role]; }
 function otherUser() { return state.users[otherRole()]; }
 function roleName(r) { return state.users[r].name; }
+/* a scheduled session's plannedBy only ever stored the planner's ROLE ('trainer'/
+   'client'), so "Planned by" was resolving to whoever currently holds that role —
+   wrong the moment a trainee gets reassigned to a different trainer. Newly created
+   scheduled sessions also snapshot the planner's actual name (plannedByName);
+   older records without one fall back to the old role-lookup behavior. */
+function plannedByDisplay(s) { return s.plannedByName || roleName(s.plannedBy); }
 
 function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
@@ -703,6 +709,18 @@ function emptyDraftOnCurrentPage() {
   if (r.parts[0] !== 'sequences' || !r.parts[1]) return null;
   const seq = getSequence(r.parts[1]);
   if (!seq || !seq.draft || seq.exercises.length > 0) return null;
+  return seq;
+}
+/* an already-saved (non-draft) sequence currently open for editing with
+   unsaved changes — leaving without saving needs its own confirm, distinct
+   from the brand-new-draft guard above */
+function editedSeqNavGuard() {
+  const r = route();
+  if (r.parts[0] !== 'sequences' || !r.parts[1]) return null;
+  const seq = getSequence(r.parts[1]);
+  if (!seq || seq.draft) return null;
+  if (state.ui.seqDirtyFor !== seq.id || state.ui.seqSnapshot == null) return null;
+  if (state.ui.seqSnapshot === seqDirtySignature(seq)) return null;
   return seq;
 }
 window.addEventListener('hashchange', render);
@@ -967,6 +985,7 @@ function renderModal() {
   else if (m.type === 'delete-session-confirm') inner = modalDeleteSessionConfirm(m);
   else if (m.type === 'delete-exercise-confirm') inner = modalDeleteExerciseConfirm(m);
   else if (m.type === 'draft-nav-confirm') inner = modalDraftNavConfirm(m);
+  else if (m.type === 'seq-edit-nav-confirm') inner = modalSeqEditNavConfirm(m);
   else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
   else if (m.type === 'cancel-scheduled-confirm') inner = modalCancelScheduledConfirm(m);
   else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
@@ -1267,6 +1286,16 @@ function modalDraftNavConfirm(m) {
     <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5">${icon('edit','text-[16px]')}Keep Editing</button>
   `);
 }
+function modalSeqEditNavConfirm(m) {
+  const seq = getSequence(m.id);
+  return modalShell('Save Changes?', `
+    <p class="font-body-md text-body-md text-on-surface-variant">You have unsaved changes to "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>". Save them before leaving, or discard?</p>
+  `, `
+    <button data-action="seq-edit-nav-save" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2">${icon('check_circle','text-[20px]')}Save Changes</button>
+    <button data-action="seq-edit-nav-discard" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5">${icon('undo','text-[16px]')}Discard Changes</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md flex items-center justify-center gap-1.5">${icon('edit','text-[16px]')}Keep Editing</button>
+  `);
+}
 function modalCancelSessionConfirm() {
   return modalShell('Cancel Workout?', `
     <p class="font-body-md text-body-md text-on-surface-variant">This will discard everything logged in this session. It won't be saved to history. This can't be undone.</p>
@@ -1349,7 +1378,7 @@ function renderHomeClient() {
       </div>
       <div class="flex items-center gap-1 bg-surface-container text-on-surface-variant px-2.5 py-1 rounded-full">
         ${icon('verified','text-[14px] text-secondary')}
-        <span class="font-label-sm text-label-sm font-medium">Planned by ${esc(roleName(next.plannedBy))}</span>
+        <span class="font-label-sm text-label-sm font-medium">Planned by ${esc(plannedByDisplay(next))}</span>
       </div>
     </div>
     <div class="flex flex-col gap-1 relative z-10">
@@ -1432,12 +1461,12 @@ function scheduleRow(s) {
         </div>
         <div class="flex flex-col min-w-0">
           <span class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(seq.name)}</span>
-          <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(roleName(s.plannedBy))}</span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(plannedByDisplay(s))}</span>
         </div>
       </div>
       ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
     </button>
-    ${expanded ? `<div class="px-3.5 pb-3.5">${dayDetailCard(s)}</div>` : ''}
+    ${expanded ? `<div class="px-3.5 pb-3.5">${dayDetailCard(s, {showTitle:false})}</div>` : ''}
   </div>`;
 }
 
@@ -1600,14 +1629,15 @@ function sequenceExerciseListRows(exercises) {
     </div>`;
   }).join('');
 }
-function dayDetailCard(s) {
+function dayDetailCard(s, opts) {
+  const showTitle = !opts || opts.showTitle !== false;
   const seq = getSequence(s.sequenceId);
   const statusPill = s.status==='completed' ? pill('Completed','bg-primary-fixed text-on-primary-fixed-variant') :
     s.status==='skipped' ? pill('Skipped','bg-error-container text-on-error-container') : pill('Planned','bg-surface-container text-on-surface-variant');
   return `
-  <div class="flex flex-col gap-2 border-t border-outline-variant/30 pt-3 mt-1 first:border-t-0 first:pt-0 first:mt-0">
-    <div class="flex items-center justify-between gap-2">
-      ${marqueeHtml(seq.name, 'font-headline-md text-headline-md text-on-surface min-w-0 flex-1')}
+  <div class="flex flex-col gap-2 ${showTitle ? 'border-t border-outline-variant/30 pt-3 mt-1 first:border-t-0 first:pt-0 first:mt-0' : ''}">
+    <div class="flex items-center ${showTitle ? 'justify-between' : 'justify-end'} gap-2">
+      ${showTitle ? marqueeHtml(seq.name, 'font-headline-md text-headline-md text-on-surface min-w-0 flex-1') : ''}
       <div class="flex items-center gap-1.5 flex-shrink-0">
         ${statusPill}
         <a href="#/sequences/${seq.id}" aria-label="Edit sequence" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">${icon('edit','text-[16px]')}</a>
@@ -1615,7 +1645,7 @@ function dayDetailCard(s) {
       </div>
     </div>
     <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
-      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(roleName(s.plannedBy))}</span>
+      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(plannedByDisplay(s))}</span>
     </div>
     <div class="flex flex-col gap-1 mt-1">
       ${sequenceExerciseListRows(seq.exercises)}
@@ -1648,7 +1678,7 @@ function listFeedCard(s) {
         </div>
         <div class="flex flex-col min-w-0">
           <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(seq.name)}</h4>
-          <span class="font-label-sm text-label-sm text-on-surface-variant">Planned by ${esc(roleName(s.plannedBy))}</span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant">Planned by ${esc(plannedByDisplay(s))}</span>
         </div>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -1656,7 +1686,7 @@ function listFeedCard(s) {
         ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant')}
       </div>
     </button>
-    ${expanded ? `<div class="px-space-md pb-space-md">${dayDetailCard(s)}</div>` : `
+    ${expanded ? `<div class="px-space-md pb-space-md">${dayDetailCard(s, {showTitle:false})}</div>` : `
     <div class="px-space-md pb-space-md">
       <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate bg-surface-container-low/40 rounded-xl px-3 py-2">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>getExercise(sx.exerciseId)).filter(Boolean).map(ex=>esc(ex.name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
     </div>`}
@@ -1742,13 +1772,35 @@ function sequenceCard(s, isTrainer) {
   </div>`;
 }
 
+/* a snapshot of everything the sequence editor lets you change: the exercises
+   array itself (add/remove/reorder, plus each prescription's sets/drops), AND
+   the shared exercise record's category/laterality/load-type (edited from this
+   page too, but stored outside sx.prescription) — comparing this against the
+   snapshot taken on page entry is what drives "unsaved changes", so reverting
+   an edit (including dragging an exercise back to its original spot) correctly
+   clears the dirty state instead of it staying stuck once tripped. */
+function seqDirtySignature(s) {
+  return JSON.stringify(s.exercises.map(sx => {
+    const ex = getExercise(sx.exerciseId);
+    return { id: sx.id, exerciseId: sx.exerciseId, prescription: sx.prescription,
+      exCategory: ex && ex.category, exLaterality: ex && ex.laterality, exLoadType: ex && ex.loadType };
+  }));
+}
 function renderSequenceDetail(seqId) {
   const s = getSequence(seqId);
   if (!s) return `<p class="text-on-surface-variant">Sequence not found.</p>`;
-  if (state.ui.seqDirtyFor !== seqId) { state.ui.seqDirtyFor = seqId; state.ui.seqDirty = false; }
+  if (state.ui.seqDirtyFor !== seqId) { state.ui.seqDirtyFor = seqId; state.ui.seqSnapshot = seqDirtySignature(s); }
+  const dirty = state.ui.seqSnapshot !== seqDirtySignature(s);
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   const isDraft = !!s.draft;
   const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
+  const addBtn = isTrainer ? `<button data-action="open-add-exercise" data-seq-id="${s.id}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>` : '';
+  const saveChangesBtn = (isTrainer && !isDraft && dirty) ? `<button data-action="save-sequence-changes" data-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('check_circle','text-[20px]')}Save Changes</button>` : '';
+  const primaryBtns = isDraft ? `
+    <button data-action="save-sequence-draft" data-id="${s.id}" ${s.exercises.length===0?'disabled':''} class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 disabled:opacity-40" type="button">${icon('check_circle','text-[20px]')}Save Sequence</button>
+    ${s.exercises.length===0 ? `<p class="font-label-sm text-label-sm text-on-surface-variant text-center">Add at least one exercise before saving.</p>` : ''}
+    <button data-action="open-delete-sequence" data-id="${s.id}" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5" type="button">${icon('delete','text-[16px]')}Discard</button>
+  ` : `<button data-action="start-workout" data-sequence-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[20px]')}Start This Sequence Now</button>`;
   return `
   <div class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-1 flex items-center gap-2 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
@@ -1777,21 +1829,11 @@ function renderSequenceDetail(seqId) {
     ${s.exercises.map((sx, i) => sequenceExerciseRow(s, sx, i, isTrainer)).join('')}
   </div>
 
-  ${isTrainer ? `
-  <button data-action="open-add-exercise" data-seq-id="${s.id}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-md" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>
-  ` : ''}
-
-  ${(isTrainer && !isDraft && state.ui.seqDirty) ? `
-  <button data-action="save-sequence-changes" data-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm" type="button">${icon('check_circle','text-[20px]')}Save Changes</button>
-  ` : ''}
-
-  ${isDraft ? `
-  <button data-action="save-sequence-draft" data-id="${s.id}" ${s.exercises.length===0?'disabled':''} class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm disabled:opacity-40" type="button">${icon('check_circle','text-[20px]')}Save Sequence</button>
-  ${s.exercises.length===0 ? `<p class="font-label-sm text-label-sm text-on-surface-variant text-center mt-2">Add at least one exercise before saving.</p>` : ''}
-  <button data-action="open-delete-sequence" data-id="${s.id}" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5 mt-2" type="button">${icon('delete','text-[16px]')}Discard</button>
-  ` : `
-  <button data-action="start-workout" data-sequence-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 mt-space-sm" type="button">${icon('play_arrow','text-[20px]')}Start This Sequence Now</button>
-  `}
+  <div class="sticky z-20 -mx-margin px-margin pt-3 flex flex-col gap-2 bg-surface" style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); padding-bottom: 0.75rem;">
+    ${addBtn}
+    ${saveChangesBtn}
+    ${primaryBtns}
+  </div>
   `;
 }
 
@@ -1963,7 +2005,7 @@ function buildSessionExercise(exerciseId, prescription) {
 function resolveStartScheduledId(ds) {
   if (ds.scheduledId) return ds.scheduledId;
   if (!ds.date) return null;
-  const sch = { id: uid('sch'), sequenceId: ds.sequenceId, date: ds.date, plannedBy: state.role, status: 'planned', note: '' };
+  const sch = { id: uid('sch'), sequenceId: ds.sequenceId, date: ds.date, plannedBy: state.role, plannedByName: myName(), status: 'planned', note: '' };
   state.scheduledSessions.push(sch);
   return sch.id;
 }
@@ -2264,8 +2306,9 @@ function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex) {
 
 /* ================= SESSION DETAIL / SUMMARY (read-only) ================= */
 /* ---- shared glanceable table (Workout | Weight | Reps | Notes) for history/summary review ---- */
+const SESSION_TABLE_COLS = 'grid-cols-[1.1fr_0.95fr_0.85fr_0.95fr]';
 function tableHeaderRow() {
-  return `<div class="grid grid-cols-[1.9fr_0.85fr_0.75fr_0.8fr] gap-1.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+  return `<div class="grid ${SESSION_TABLE_COLS} gap-2.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
     <div class="truncate">Workout</div><div class="text-right truncate">Weight</div><div class="text-right truncate">Reps</div><div class="text-right truncate">RPE</div>
   </div>`;
 }
@@ -2277,7 +2320,7 @@ function intensityBadgeHtml(set, isUni) {
 }
 function tableDataRow({ label, labelSub, badge, weight, weightUnit, reps, noteBadge, dim, href }) {
   const Tag = href ? 'a' : 'div';
-  return `<${Tag} ${href ? `href="${href}"` : ''} class="grid grid-cols-[1.9fr_0.85fr_0.75fr_0.8fr] gap-1.5 px-2.5 py-2 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
+  return `<${Tag} ${href ? `href="${href}"` : ''} class="grid ${SESSION_TABLE_COLS} gap-2.5 px-2.5 py-2 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
     <div class="min-w-0">
       <div class="flex items-center gap-1 flex-wrap">
         <span class="font-label-md text-label-md text-on-surface truncate">${label}</span>
@@ -2414,6 +2457,35 @@ function renderHistory() {
 }
 
 function historyMonths() { return [...new Set(completedSessionsSorted().map(s => monthKey(s.date)))]; }
+/* aggregate stats for a highlights box — called with the same session list the
+   page is already showing, so "all time" vs "this month" falls out for free */
+function sessionsHighlights(sessions) {
+  if (!sessions.length) return null;
+  let volume = 0, prs = 0;
+  sessions.forEach(s => {
+    volume += sessionStats(s).volume;
+    s.exercises.forEach(ex => {
+      const top = topWorkingSet(ex);
+      if (top && hasSetData(top) && isPR(ex.exerciseId, top, s.date)) prs++;
+    });
+  });
+  return { count: sessions.length, volume: Math.round(volume), prs };
+}
+function renderHighlightsBox(title, h) {
+  if (!h) return '';
+  const items = [
+    { value: h.count, label: h.count===1?'Session':'Sessions' },
+    { value: `${h.volume.toLocaleString()}`, label: 'kg Volume' },
+    { value: h.prs, label: h.prs===1?'PR':'PRs' },
+  ];
+  return `
+  <div class="bg-gradient-to-br from-primary/15 to-primary/5 rounded-2xl p-4 shadow-sm mb-space-md border border-primary/20">
+    <div class="flex items-center gap-1.5 mb-2.5">${icon('insights','text-[18px] text-primary')}<h4 class="font-title-md text-title-md text-on-surface font-bold">${esc(title)}</h4></div>
+    <div class="grid grid-cols-3 gap-2">
+      ${items.map(it=>`<div class="flex flex-col items-center text-center"><span class="font-numeric-metric text-numeric-metric text-on-surface">${it.value}</span><span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">${it.label}</span></div>`).join('')}
+    </div>
+  </div>`;
+}
 function renderHistorySessions() {
   const allSessions = completedSessionsSorted();
   const months = historyMonths();
@@ -2424,7 +2496,9 @@ function renderHistorySessions() {
   const idx = months.indexOf(filterMonth);
   const canPrev = filterMonth !== 'all' && idx < months.length - 1;
   const canNext = filterMonth !== 'all' && idx > 0;
+  const highlightsTitle = viewMode==='all' ? 'All-Time Highlights' : `${monthLabel(filterMonth)} Highlights`;
   return `
+  ${renderHighlightsBox(highlightsTitle, sessionsHighlights(list))}
   ${viewMode==='month' ? `
   <div class="flex items-center justify-center gap-3 mb-space-md">
     <button data-action="history-month-prev" ${canPrev?'':'disabled'} aria-label="Older month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_left','text-[20px]')}</button>
@@ -2458,12 +2532,45 @@ function renderHistorySessions() {
   </div>`;
 }
 
+/* biggest recent win across all exercises — ranked by raw weight delta between
+   an exercise's latest logged top set and its previous occurrence */
+function bestExerciseProgress() {
+  let best = null;
+  state.exercises.forEach(ex => {
+    const sessions = completedSessionsSorted().filter(s => s.exercises.some(e => e.exerciseId === ex.id));
+    if (sessions.length < 2) return;
+    const latest = sessions[0];
+    const block = latest.exercises.find(e => e.exerciseId === ex.id);
+    const top = topWorkingSet(block);
+    if (!top || !hasSetData(top)) return;
+    const prevResult = findPreviousExerciseBlock(ex.id, latest.id);
+    const prevTop = prevResult ? topWorkingSet(prevResult.block) : null;
+    const cmp = compareTopSetFull(prevTop, top);
+    if (!cmp || cmp.dir !== 'up') return;
+    const dw = (weightOf(top) || 0) - (prevTop ? (weightOf(prevTop) || 0) : 0);
+    if (!best || dw > best.dw) best = { ex, text: cmp.text, date: latest.date, dw };
+  });
+  return best;
+}
+function renderBestProgressHighlight() {
+  const best = bestExerciseProgress();
+  if (!best) return '';
+  return `
+  <div class="bg-gradient-to-br from-primary/15 to-primary/5 rounded-2xl p-4 shadow-sm mb-space-md border border-primary/20 flex items-start gap-2.5">
+    ${icon('trending_up','text-[22px] text-primary flex-shrink-0 mt-0.5')}
+    <div class="min-w-0">
+      <h4 class="font-title-md text-title-md text-on-surface font-bold">Best Progress</h4>
+      <p class="font-body-md text-body-md text-on-surface-variant"><span class="text-on-surface font-semibold">${esc(best.ex.name)}</span> — ${esc(best.text)} <span class="text-on-surface-variant">(${fmtShort(best.date)})</span></p>
+    </div>
+  </div>`;
+}
 function renderHistoryExercisePicker() {
   if (!state.exercises.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No exercises yet — add some from the Library.</p>`;
   const cat = state.ui.historyExerciseCategory || 'all';
   const list = state.exercises.filter(e => cat==='all' || e.category===cat);
   const expandedId = state.ui.historyFilterExercise;
   return `
+  ${renderBestProgressHighlight()}
   <div class="flex items-center gap-2 overflow-x-auto pb-1 mb-space-md -mx-margin px-margin">
     ${['all',...CATEGORIES].map(c=>`<button data-action="history-filter-cat" data-cat="${c}" class="flex-shrink-0 h-9 px-3 rounded-full font-label-sm text-label-sm ${cat===c?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}" type="button">${c==='all'?'All':c}</button>`).join('')}
   </div>
@@ -2498,7 +2605,7 @@ function renderExerciseHistory(exerciseId) {
   `;
 }
 
-const PROGRESS_GRID_COLS = 'grid-cols-[1.2fr_1fr_0.9fr_1fr]';
+const PROGRESS_GRID_COLS = 'grid-cols-[1.1fr_0.95fr_0.85fr_0.95fr]';
 function progressDelta(delta, unit) {
   if (delta == null || isNaN(delta) || delta === 0) return `<span class="block font-label-sm text-label-sm text-on-surface-variant">–</span>`;
   const good = delta > 0;
@@ -2556,27 +2663,27 @@ function renderExerciseHistoryBody(exerciseId) {
     const expanded = state.ui.expandedHistorySessionId === s.id;
 
     return `
-    <button data-action="toggle-history-row" data-id="${s.id}" type="button" class="w-full grid ${PROGRESS_GRID_COLS} gap-2 px-3 py-3 border-t border-outline-variant/20 items-center hover:bg-surface-container-low/60 transition-colors text-left">
+    <button data-action="toggle-history-row" data-id="${s.id}" type="button" class="w-full grid ${PROGRESS_GRID_COLS} gap-1.5 px-2.5 py-2.5 border-t border-outline-variant/20 items-center hover:bg-surface-container-low/60 transition-colors text-left">
       <div class="min-w-0 flex items-center gap-1">
-        ${icon(expanded?'expand_less':'expand_more','text-[18px] text-on-surface-variant flex-shrink-0')}
+        ${icon(expanded?'expand_less':'expand_more','text-[16px] text-on-surface-variant flex-shrink-0')}
         <span class="min-w-0">
-          <span class="font-label-md text-label-md text-on-surface font-semibold block">${fmtShort(s.date)}</span>
-          ${extra > 0 ? `<span class="font-label-sm text-label-sm text-on-surface-variant">+${extra} more set${extra > 1 ? 's' : ''}</span>` : ''}
+          <span class="font-label-sm text-label-sm text-on-surface font-semibold block truncate">${fmtShort(s.date)}</span>
+          ${extra > 0 ? `<span class="font-label-sm text-label-sm text-on-surface-variant block truncate">+${extra} more</span>` : ''}
         </span>
       </div>
       <div class="min-w-0">
-        <div class="flex items-baseline gap-1 flex-wrap">
-          <span class="font-numeric-metric text-numeric-metric text-on-surface">${weightDisplay}</span>${!isUni ? `<span class="font-label-sm text-label-sm text-on-surface-variant">${unit}</span>` : ''}
-          ${pr ? pill('PR', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
+        <div class="flex items-baseline gap-0.5 flex-wrap">
+          <span class="text-[15px] font-bold text-on-surface leading-tight truncate">${weightDisplay}</span>${!isUni ? `<span class="text-[9px] font-medium text-on-surface-variant">${unit}</span>` : ''}
         </div>
+        ${pr ? pill('PR', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
         ${weightDeltaHtml}
       </div>
       <div class="min-w-0">
-        <span class="font-numeric-metric text-numeric-metric text-on-surface">${reps}</span>
+        <span class="text-[15px] font-bold text-on-surface leading-tight truncate block">${reps}</span>
         ${repsDeltaHtml}
       </div>
       <div class="min-w-0">
-        <span class="font-label-md text-label-md font-bold ${(isUni ? (top.intensityValueLeft==='failure'||top.intensityValueRight==='failure') : top.intensityValue==='failure')?'text-tertiary':'text-on-surface'}">${(isUni ? intensityLabelSides(top) : intensityLabel(top)) || '–'}</span>
+        <span class="font-label-sm text-label-sm font-bold truncate block ${(isUni ? (top.intensityValueLeft==='failure'||top.intensityValueRight==='failure') : top.intensityValue==='failure')?'text-tertiary':'text-on-surface'}">${(isUni ? intensityLabelSides(top) : intensityLabel(top)) || '–'}</span>
         ${rpeDeltaHtml}
       </div>
     </button>
@@ -2594,8 +2701,8 @@ function renderExerciseHistoryBody(exerciseId) {
     <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(ex.category)} • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(ex.loadType)}</span>
   </div>
   <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-    <div class="grid ${PROGRESS_GRID_COLS} gap-2 px-3 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-      <div>Date</div><div>Weight</div><div>Reps</div><div>RPE</div>
+    <div class="grid ${PROGRESS_GRID_COLS} gap-1.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+      <div class="truncate">Date</div><div class="truncate">Weight</div><div class="truncate">Reps</div><div class="truncate">RPE</div>
     </div>
     ${rows || `<p class="font-body-md text-body-md text-on-surface-variant p-4">No completed sets logged yet.</p>`}
   </div>
@@ -2938,7 +3045,7 @@ const actions = {
   },
   'schedule-confirm': () => {
     const date = state.ui.modal.date, sequenceId = $('#f-seq').value;
-    state.scheduledSessions.push({ id: uid('sch'), sequenceId, date, plannedBy: state.role, status: 'planned', note: '' });
+    state.scheduledSessions.push({ id: uid('sch'), sequenceId, date, plannedBy: state.role, plannedByName: myName(), status: 'planned', note: '' });
     state.ui.calSelectedDate = date; state.ui.modal = null; saveState(); rerender();
   },
   'reschedule-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.date = state.ui.modal.date; state.ui.modal = null; saveState(); rerender(); },
@@ -3077,6 +3184,28 @@ const actions = {
     saveState();
     navigate(href);
   },
+  'seq-edit-nav-save': () => {
+    const { id, targetHref } = state.ui.modal;
+    const seq = getSequence(id);
+    state.ui.seqSnapshot = seqDirtySignature(seq);
+    state.ui.modal = null;
+    navigate(targetHref);
+  },
+  'seq-edit-nav-discard': () => {
+    const { id, targetHref } = state.ui.modal;
+    const seq = getSequence(id);
+    if (seq && state.ui.seqSnapshot != null) {
+      const snap = JSON.parse(state.ui.seqSnapshot);
+      seq.exercises = snap.map(x => ({ id: x.id, exerciseId: x.exerciseId, prescription: x.prescription }));
+      snap.forEach(x => {
+        const ex = getExercise(x.exerciseId);
+        if (ex) { ex.category = x.exCategory; ex.laterality = x.exLaterality; ex.loadType = x.exLoadType; }
+      });
+    }
+    state.ui.modal = null;
+    saveState();
+    navigate(targetHref);
+  },
   'start-inline-rename': (ds) => { state.ui.inlineRenameSeqId = ds.id; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
   'cancel-inline-rename': () => { state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; rerender(); },
   'confirm-inline-rename': (ds) => {
@@ -3108,11 +3237,15 @@ const actions = {
   },
   'toggle-home-upcoming': (ds) => { state.ui.expandedUpcomingId = state.ui.expandedUpcomingId === ds.id ? null : ds.id; rerender(); },
   'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
-  'save-sequence-changes': () => { state.ui.seqDirty = false; showToast('Changes saved'); },
+  'save-sequence-changes': (ds) => {
+    const seq = getSequence(ds.id);
+    state.ui.seqSnapshot = seqDirtySignature(seq);
+    showToast('Changes saved');
+  },
   'add-exercise-confirm': (ds) => {
     const seq = getSequence(ds.seqId), ex = getExercise(ds.exerciseId);
     seq.exercises.push(sequenceExerciseFromLibrary(ex));
-    state.ui.modal = null; state.ui.seqDirty = true; saveState(); rerender();
+    state.ui.modal = null; saveState(); rerender();
   },
   'open-add-exercise-session': () => { state.ui.modal = { type: 'session-exercise-picker', mode: 'add', q: '' }; rerender(); },
   'open-swap-exercise-session': (ds) => { state.ui.modal = { type: 'session-exercise-picker', mode: 'swap', exIdx: Number(ds.exIdx), q: '' }; rerender(); },
@@ -3173,17 +3306,17 @@ const actions = {
     } : null;
     if (ds.mode === 'add') { state.activeSession.exercises.push(buildSessionExercise(ex.id, sessionPrescription)); }
     else if (ds.mode === 'swap') { state.activeSession.exercises[Number(ds.exIdx)] = buildSessionExercise(ex.id, sessionPrescription); }
-    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); state.ui.seqDirty = true; }
+    else if (ds.seqId) { const seq = getSequence(ds.seqId); seq.exercises.push(sequenceExerciseFromLibrary(ex)); }
     state.ui.modal = null; saveState(); rerender();
   },
-  'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
-  'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
-  'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; state.ui.seqDirty = true; saveState(); rerender(); },
+  'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
+  'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; saveState(); rerender(); },
+  'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; saveState(); rerender(); },
   'step-sequence-sets': (ds) => {
     const p = getSequence(ds.seqId).exercises[Number(ds.idx)].prescription;
     const cur = Number(p.sets) || 0;
     p.sets = Math.max(1, cur + Number(ds.dir));
-    state.ui.seqDirty = true; saveState(); rerender();
+    saveState(); rerender();
   },
   'step-input': (ds) => {
     const el = document.getElementById(ds.target);
@@ -3192,16 +3325,16 @@ const actions = {
     const next = Math.max(0, cur + Number(ds.dir));
     el.value = String(next);
   },
-  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); state.ui.seqDirty = true; saveState(); rerender(); },
-  'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); state.ui.seqDirty = true; saveState(); rerender(); },
+  'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); saveState(); rerender(); },
+  'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
   'reorder-exercise': (ds) => {
     const seq = getSequence(ds.seqId), from = Number(ds.fromIdx), to = Number(ds.toIdx);
     if (from === to || from < 0 || to < 0 || from >= seq.exercises.length || to >= seq.exercises.length) return;
     const [item] = seq.exercises.splice(from, 1);
     seq.exercises.splice(to, 0, item);
-    state.ui.seqDirty = true; saveState(); rerender();
+    saveState(); rerender();
   },
-  'remove-exercise': (ds) => { getSequence(ds.seqId).exercises.splice(Number(ds.idx), 1); state.ui.seqDirty = true; saveState(); rerender(); },
+  'remove-exercise': (ds) => { getSequence(ds.seqId).exercises.splice(Number(ds.idx), 1); saveState(); rerender(); },
 
   'lib-filter-cat': (ds) => { state.ui.libCategory = ds.cat; rerender(); },
   'history-tab': (ds) => { state.ui.historyTab = ds.tab; rerender(); },
@@ -3241,6 +3374,13 @@ document.addEventListener('click', (e) => {
       if (guardSeq) {
         e.preventDefault();
         state.ui.modal = { type: 'draft-nav-confirm', id: guardSeq.id, targetHref };
+        rerender();
+        return;
+      }
+      const editGuardSeq = editedSeqNavGuard();
+      if (editGuardSeq) {
+        e.preventDefault();
+        state.ui.modal = { type: 'seq-edit-nav-confirm', id: editGuardSeq.id, targetHref };
         rerender();
         return;
       }
@@ -3293,7 +3433,6 @@ document.addEventListener('input', (e) => {
       val = raw === '' ? null : (/\.$/.test(raw) ? raw : Number(raw));
     }
     setPath(state, el.dataset.bind, val);
-    if (el.dataset.bind.startsWith('sequences.')) state.ui.seqDirty = true;
     /* unilateral weight entry: duplicate onto the other side as a convenience
        (most dumbbell/single-limb work uses the same load both sides) — but
        only while that side hasn't been typed into directly, so correcting it
