@@ -408,7 +408,16 @@ async function finishResolveAccess(user, wl, isAdmin) {
     if (trainerUids.length) {
       const tSnap = await get(ref(db, `users/${trainerUids[0]}`));
       const t = tSnap.val();
-      state.users.trainer = { id: trainerUids[0], name: t ? nameOf(t) : 'Trainer' };
+      let trainerName = t ? nameOf(t) : null;
+      if (!trainerName) {
+        /* their /users record is missing (shouldn't normally happen, since it's
+           written on every login) — fall back to their whitelisted email rather
+           than a generic placeholder like "Trainer" */
+        const wlAll = Object.values((await get(ref(db, 'whitelist'))).val() || {});
+        const match = wlAll.find(w => w.uid === trainerUids[0]);
+        trainerName = match ? match.email : 'your trainer';
+      }
+      state.users.trainer = { id: trainerUids[0], name: trainerName };
     } else {
       const pendingEmail = await pendingTrainerNameFor(user.uid);
       state.users.trainer = pendingEmail
