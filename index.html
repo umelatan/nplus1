@@ -1807,6 +1807,23 @@ function loadTypeLabel(t) { return {single_total:'Single load', per_side:'Per si
 /* builds a live session exercise block for exerciseId — if this exercise has a previously completed
    session, follows its actual set/drop structure; otherwise falls back to the given prescription
    (sequence template default, or a bare 1-set/0-drop prescription when added/swapped in mid-session) */
+/* carries a set's (or drop's) logged weight/reps/intensity across a laterality
+   switch mid-session, instead of just blanking the other shape — same side
+   both ways when going bilateral→unilateral, the first side with data when
+   collapsing back down */
+function convertSetLaterality(set, toUnilateral) {
+  if (toUnilateral) {
+    set.weightLeft = set.weight; set.weightRight = set.weight;
+    set.repsLeft = set.reps; set.repsRight = set.reps;
+    set.intensityMethodLeft = set.intensityMethod; set.intensityValueLeft = set.intensityValue;
+    set.intensityMethodRight = set.intensityMethod; set.intensityValueRight = set.intensityValue;
+  } else {
+    set.weight = set.weightLeft ?? set.weightRight ?? null;
+    set.reps = set.repsLeft ?? set.repsRight ?? null;
+    set.intensityMethod = set.intensityMethodLeft || set.intensityMethodRight || set.intensityMethod || 'rpe';
+    set.intensityValue = set.intensityValueLeft ?? set.intensityValueRight ?? null;
+  }
+}
 function buildSessionExercise(exerciseId, prescription) {
   const ex = getExercise(exerciseId);
   const p = prescription || { sets: 1, drops: [], intensityMethod: 'rpe', notes: '', restSeconds: null, repLow: null, repHigh: null, intensityTarget: null };
@@ -1949,6 +1966,13 @@ function renderWorkoutExercise(ex, exIdx, session) {
         <h3 class="font-headline-lg text-headline-lg text-on-surface mt-1 tracking-tight">${esc(ex.nameSnapshot.toUpperCase())}</h3>
       </div>
       <button data-action="open-swap-exercise-session" data-ex-idx="${exIdx}" class="flex-shrink-0 h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('swap_horiz','text-[16px]')}Swap</button>
+    </div>
+    <div class="flex items-center gap-2 mb-3">
+      <span class="font-label-sm text-label-sm text-on-surface-variant">Tracking</span>
+      <div class="bg-surface-container p-0.5 rounded-full flex items-center">
+        <button data-action="toggle-session-laterality" data-ex-idx="${exIdx}" data-value="bilateral" class="px-2.5 py-1 rounded-full font-label-sm text-label-sm transition-all ${ex.laterality!=='unilateral'?'bg-surface-container-lowest text-on-surface shadow-sm font-bold':'text-on-surface-variant'}" type="button">Bilateral</button>
+        <button data-action="toggle-session-laterality" data-ex-idx="${exIdx}" data-value="unilateral" class="px-2.5 py-1 rounded-full font-label-sm text-label-sm transition-all ${ex.laterality==='unilateral'?'bg-surface-container-lowest text-on-surface shadow-sm font-bold':'text-on-surface-variant'}" type="button">Unilateral</button>
+      </div>
     </div>
     ${prevBlock ? `
     <div class="mb-3 bg-surface-container-low rounded-xl p-3">
@@ -2907,6 +2931,22 @@ const actions = {
   },
   'open-add-exercise-session': () => { state.ui.modal = { type: 'session-exercise-picker', mode: 'add', q: '' }; rerender(); },
   'open-swap-exercise-session': (ds) => { state.ui.modal = { type: 'session-exercise-picker', mode: 'swap', exIdx: Number(ds.exIdx), q: '' }; rerender(); },
+  'toggle-session-laterality': (ds) => {
+    const exIdx = Number(ds.exIdx);
+    const ex = state.activeSession.exercises[exIdx];
+    const toUnilateral = ds.value === 'unilateral';
+    if ((ex.laterality === 'unilateral') === toUnilateral) return;
+    ex.laterality = toUnilateral ? 'unilateral' : 'bilateral';
+    ex.sets.forEach(set => {
+      convertSetLaterality(set, toUnilateral);
+      (set.drops || []).forEach(d => convertSetLaterality(d, toUnilateral));
+    });
+    /* also corrects the shared exercise record, same as the sequence editor's
+       own Tracking selector — so future sessions start with the right shape */
+    const libEx = getExercise(ex.exerciseId);
+    if (libEx) libEx.laterality = ex.laterality;
+    saveState(); rerender();
+  },
   'session-exercise-pick-confirm': (ds) => {
     const block = buildSessionExercise(ds.exerciseId, null);
     if (ds.mode === 'swap') state.activeSession.exercises[Number(ds.exIdx)] = block;
