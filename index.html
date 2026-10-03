@@ -1007,7 +1007,7 @@ function modalEditSessionDate(m) {
 function modalEditSessionExercise(m) {
   const ex = state.activeSession.exercises[m.exIdx];
   return modalShell('Edit Exercise', `
-    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Body area</span>
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Category</span>
       <select data-action="set-session-exercise-category" data-ex-idx="${m.exIdx}" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
         ${CATEGORIES.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}
       </select>
