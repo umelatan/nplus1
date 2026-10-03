@@ -1107,7 +1107,11 @@ function modalNewExercise(m) {
     </div>
     <div class="grid grid-cols-2 gap-3">
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default sets <span class="text-on-surface-variant/60">(optional)</span></span>
-        <input id="nf-sets" type="text" inputmode="numeric" placeholder="e.g. 3" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+        <div class="flex items-center gap-1">
+          <button data-action="step-input" data-target="nf-sets" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
+          <input id="nf-sets" type="text" inputmode="numeric" placeholder="e.g. 3" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
+          <button data-action="step-input" data-target="nf-sets" data-dir="1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
+        </div>
       </label>
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
         <input id="nf-drops" type="text" inputmode="numeric" placeholder="e.g. 0" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
@@ -1765,7 +1769,13 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
     <div class="px-3.5 pb-3.5 flex flex-col gap-3 border-t border-outline-variant/30 pt-3">
       ${isTrainer ? `
       <div class="grid grid-cols-2 gap-2">
-        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Sets</span><input data-bind="sequences.${seqIdx(seq.id)}.exercises.${idx}.prescription.sets" data-type="number" type="text" inputmode="decimal" value="${p.sets}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center"></label>
+        <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Sets</span>
+          <div class="flex items-center gap-1">
+            <button data-action="step-sequence-sets" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="-1" type="button" class="w-8 h-10 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
+            <input data-bind="sequences.${seqIdx(seq.id)}.exercises.${idx}.prescription.sets" data-type="number" type="text" inputmode="decimal" value="${p.sets}" class="h-10 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
+            <button data-action="step-sequence-sets" data-seq-id="${seq.id}" data-idx="${idx}" data-dir="1" type="button" class="w-8 h-10 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
+          </div>
+        </label>
         <label class="flex flex-col gap-1"><span class="font-label-sm text-label-sm text-on-surface-variant">Category</span>
           <select data-action="set-exercise-category" data-exercise-id="${ex.id}" class="h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center">
             ${CATEGORIES.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}
@@ -3036,6 +3046,19 @@ const actions = {
   'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
   'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; saveState(); rerender(); },
   'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; saveState(); rerender(); },
+  'step-sequence-sets': (ds) => {
+    const p = getSequence(ds.seqId).exercises[Number(ds.idx)].prescription;
+    const cur = Number(p.sets) || 0;
+    p.sets = Math.max(1, cur + Number(ds.dir));
+    saveState(); rerender();
+  },
+  'step-input': (ds) => {
+    const el = document.getElementById(ds.target);
+    if (!el) return;
+    const cur = parseInt(el.value, 10) || 0;
+    const next = Math.max(0, cur + Number(ds.dir));
+    el.value = next === 0 ? '' : String(next);
+  },
   'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); saveState(); rerender(); },
   'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
   'move-exercise': (ds) => {
