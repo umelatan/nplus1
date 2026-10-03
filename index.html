@@ -1618,7 +1618,7 @@ function renderSequencesList() {
   const archived = state.sequences.filter(s=>s.archived && !s.draft);
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   return `
-  <div class="flex items-center justify-between pt-2 mb-space-md">
+  <div class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md flex items-center justify-between bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <h2 class="font-headline-lg text-headline-lg text-on-surface">Sequences</h2>
     <div class="flex items-center gap-2">
       <a href="#/library" class="h-10 px-3 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5">${icon('menu_book','text-[18px]')}Library</a>
