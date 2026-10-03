@@ -406,18 +406,19 @@ async function finishResolveAccess(user, wl, isAdmin) {
     const tIdxSnap = await get(ref(db, `traineeIndex/${user.uid}`));
     const trainerUids = Object.keys(tIdxSnap.val() || {});
     if (trainerUids.length) {
-      const tSnap = await get(ref(db, `users/${trainerUids[0]}`));
-      const t = tSnap.val();
-      let trainerName = t ? nameOf(t) : null;
-      if (!trainerName) {
-        /* their /users record is missing (shouldn't normally happen, since it's
-           written on every login) — fall back to their whitelisted email rather
-           than a generic placeholder like "Trainer" */
-        const wlAll = Object.values((await get(ref(db, 'whitelist'))).val() || {});
-        const match = wlAll.find(w => w.uid === trainerUids[0]);
-        trainerName = match ? match.email : 'your trainer';
+      /* traineeIndex can end up with more than one trainerUid key — e.g. a
+         stale/duplicate entry from an admin assignment made against an older
+         cached uid before this trainer's current one. Don't just trust
+         trainerUids[0]: try each candidate until one actually resolves to a
+         real /users record (whitelist.uid is never reliably populated, so
+         that's not a usable fallback — /users is the only source of truth). */
+      let trainerUid = null, trainerName = null;
+      for (const tUid of trainerUids) {
+        const tSnap = await get(ref(db, `users/${tUid}`));
+        const t = tSnap.val();
+        if (t) { trainerUid = tUid; trainerName = nameOf(t); break; }
       }
-      state.users.trainer = { id: trainerUids[0], name: trainerName };
+      state.users.trainer = { id: trainerUid || trainerUids[0], name: trainerName || 'your trainer' };
     } else {
       const pendingEmail = await pendingTrainerNameFor(user.uid);
       state.users.trainer = pendingEmail
