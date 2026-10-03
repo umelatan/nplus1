@@ -1459,9 +1459,12 @@ function renderCalendar() {
           <button data-action="cal-next-month" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant" type="button">${icon('chevron_right','text-[20px]')}</button>
         </div>
       </div>
-      <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm">
-        <button data-action="cal-view" data-view="month" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('calendar_month','text-[16px]')}Month</button>
-        <button data-action="cal-view" data-view="list" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='list'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('format_list_bulleted','text-[16px]')}List</button>
+      <div class="flex items-center gap-space-xs">
+        <button data-action="cal-today" class="h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('today','text-[16px]')}Today</button>
+        <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm">
+          <button data-action="cal-view" data-view="month" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('calendar_month','text-[16px]')}Month</button>
+          <button data-action="cal-view" data-view="list" class="px-3 py-1.5 rounded-full font-label-sm text-label-sm flex items-center gap-1 ${calView==='list'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">${icon('format_list_bulleted','text-[16px]')}List</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2712,6 +2715,11 @@ const actions = {
   'cal-next-month': () => { let m = state.ui.calMonth + 1, y = state.ui.calYear; if (m > 11) { m = 0; y++; } state.ui.calMonth = m; state.ui.calYear = y; rerender(); },
   'cal-select-day': (ds) => { state.ui.calSelectedDate = ds.date; rerender(); },
   'cal-view': (ds) => { state.ui.calView = ds.view; rerender(); },
+  'cal-today': () => {
+    const d = new Date();
+    state.ui.calYear = d.getFullYear(); state.ui.calMonth = d.getMonth(); state.ui.calSelectedDate = todayISO();
+    rerender();
+  },
   'open-schedule-modal': () => {
     const first = state.sequences.find(s=>!s.archived && !s.draft);
     const d = new Date(state.ui.calSelectedDate + 'T00:00:00');
