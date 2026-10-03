@@ -1017,7 +1017,6 @@ function renderModal() {
   else if (m.type === 'seq-edit-nav-confirm') inner = modalSeqEditNavConfirm(m);
   else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
   else if (m.type === 'cancel-scheduled-confirm') inner = modalCancelScheduledConfirm(m);
-  else if (m.type === 'edit-planned-by') inner = modalEditPlannedBy(m);
   else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
   else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
@@ -1326,14 +1325,6 @@ function modalCancelScheduledConfirm(m) {
     <button data-action="cancel-scheduled-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Remove from Calendar</button>
     <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Keep It</button>
   `);
-}
-function modalEditPlannedBy(m) {
-  return modalShell('Who Planned This?', `
-    <p class="font-body-md text-body-md text-on-surface-variant -mt-1">Older scheduled workouts don't always remember exactly who planned them. Set it here if it's showing the wrong name.</p>
-    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Name</span>
-      <input id="f-planned-by-name" type="text" value="${esc(m.current||'')}" placeholder="e.g. Jude" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
-    </label>
-  `, `<button data-action="edit-planned-by-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save</button>`);
 }
 
 /* ================= HOME ================= */
@@ -1689,7 +1680,6 @@ function dayDetailCard(s, opts) {
     </div>
     <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
       <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(plannedByDisplay(s))}</span>
-      <button data-action="open-edit-planned-by" data-id="${s.id}" aria-label="Fix planner name" class="w-6 h-6 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" type="button">${icon('edit','text-[14px]')}</button>
     </div>
     <div class="flex flex-col gap-1 mt-1">
       ${sequenceExerciseListRows(seq.exercises)}
@@ -3135,17 +3125,6 @@ const actions = {
   'open-cancel-scheduled': (ds) => { state.ui.modal = { type: 'cancel-scheduled-confirm', id: ds.id }; rerender(); },
   'cancel-scheduled-confirm': (ds) => {
     state.scheduledSessions = state.scheduledSessions.filter(sc => sc.id !== ds.id);
-    state.ui.modal = null; saveState(); rerender();
-  },
-  'open-edit-planned-by': (ds) => {
-    const sc = state.scheduledSessions.find(x => x.id === ds.id);
-    state.ui.modal = { type: 'edit-planned-by', id: ds.id, current: sc ? plannedByDisplay(sc) : '' };
-    rerender();
-  },
-  'edit-planned-by-confirm': (ds) => {
-    const sc = state.scheduledSessions.find(x => x.id === ds.id);
-    const name = $('#f-planned-by-name').value.trim();
-    if (sc && name) sc.plannedByName = name;
     state.ui.modal = null; saveState(); rerender();
   },
   'schedule-seq-change': (ds, el) => {
