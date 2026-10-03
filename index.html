@@ -218,7 +218,7 @@ function freshUiState() {
   return {
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
     historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null, historyMonthPickerOpen:false, historyExerciseCategory:'all',
-    libSearch:'', libCategory:'all', modal:null, expandedHistorySessionId:null,
+    libSearch:'', libCategory:'all', modal:null, expandedHistoryIds:{},
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
@@ -504,20 +504,26 @@ function otherRole() { return state.role === 'client' ? 'trainer' : 'client'; }
 function currentUser() { return state.users[state.role]; }
 function otherUser() { return state.users[otherRole()]; }
 function roleName(r) { return state.users[r].name; }
-/* a scheduled session's plannedBy only ever stored the planner's ROLE ('trainer'/
-   'client'), so "Planned by" was resolving to whoever currently holds that role —
-   wrong the moment a trainee gets reassigned to a different trainer. Newly created
-   scheduled sessions also snapshot the planner's actual name (plannedByName);
-   older records without one fall back to the old role-lookup behavior. */
+/* a sequence's createdBy only ever stored the creator's ROLE ('trainer'/'client'),
+   so resolving it live misattributes authorship the moment a trainee gets
+   reassigned to a different trainer. Newly created sequences also snapshot the
+   creator's actual name (createdByName); older ones fall back to role-lookup. */
+function createdByDisplay(seq) { return (seq && seq.createdByName) || (seq && roleName(seq.createdBy)) || ''; }
+/* same problem, same fix, for "Planned by" on a scheduled session: newly
+   scheduled sessions snapshot the planner's actual name (plannedByName).
+   A legacy record without one falls back to the sequence's own creator
+   (since scheduling it was very likely done by whoever designed it) rather
+   than resolving through the CURRENT trainer assignment, which can name a
+   completely different person than who actually scheduled it. 'client' is
+   safe to resolve live either way: a scheduled item only ever belongs to one
+   trainee's own data tree, so that mapping never actually changes. */
 function plannedByDisplay(s) {
   if (s.plannedByName) return s.plannedByName;
-  /* legacy records (scheduled before plannedByName existed) only stored the
-     planner's ROLE, not their identity — resolving "trainer" through the
-     CURRENT trainer assignment misattributes it to whoever is assigned now,
-     which can be a completely different person than who actually scheduled
-     it. 'client' is safe to resolve live: a scheduled item only ever belongs
-     to one trainee's own data tree, so that mapping never actually changes. */
-  return s.plannedBy === 'trainer' ? 'Trainer' : roleName(s.plannedBy);
+  if (s.plannedBy === 'trainer') {
+    const seq = getSequence(s.sequenceId);
+    return (seq && createdByDisplay(seq)) || 'Trainer';
+  }
+  return roleName(s.plannedBy);
 }
 
 function upcomingScheduled() {
@@ -800,6 +806,16 @@ function render() {
     `);
   }
   requestAnimationFrame(applyMarquees);
+  requestAnimationFrame(applyHistoryStickyOffset);
+}
+/* the History page's own sticky title+tabs+filter header sits above the
+   per-exercise sticky head (title/category/column-header) inside each
+   accordion row on the Exercises tab — without this, both would pin to
+   top:0 and overlap. Measuring it lets the inner one offset below it
+   instead of hardcoding a height that'd drift the moment either changes. */
+function applyHistoryStickyOffset() {
+  const header = document.getElementById('history-sticky-header');
+  document.documentElement.style.setProperty('--history-sticky-h', header ? header.offsetHeight + 'px' : '0px');
 }
 /* measures every marquee title post-render and only animates the ones that
    actually overflow their box — most titles fit and stay static */
@@ -1371,6 +1387,35 @@ function renderHomeClient() {
     }
   }
 
+  let recentCard = '';
+  if (recent) {
+    const momentumKey = 'momentum:' + recent.id;
+    const momentumExpanded = !!state.ui.expandedHistoryIds[momentumKey];
+    recentCard = `
+    <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+      <button data-action="toggle-history-row" data-id="${momentumKey}" class="w-full p-4 flex items-center justify-between gap-3 text-left" type="button">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center flex-shrink-0 text-primary">${icon('task_alt','text-[26px]')}</div>
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Last Session • ${fmtShort(recent.date)}</span>
+              <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+              <span class="font-label-sm text-label-sm ${recent.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${recent.reviewedByTrainer?'Reviewed ✓':'Pending review'}</span>
+            </div>
+            <h4 class="font-title-md text-title-md text-on-surface truncate font-semibold">${esc(recent.sequenceName)}</h4>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(recent.durationSeconds)}</span>
+              <span class="text-outline-variant">•</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${sessionStats(recent).workingSets+sessionStats(recent).dropSets} sets logged</span>
+            </div>
+          </div>
+        </div>
+        ${icon(momentumExpanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
+      </button>
+      ${momentumExpanded ? `<div class="px-4 pb-4">${sessionDetailBody(recent)}</div>` : ''}
+    </div>`;
+  }
+
   return `
   <section class="flex flex-col gap-1.5 pt-2">
     <h1 class="font-headline-xl-mobile text-headline-xl-mobile text-on-surface tracking-tight">${greeting}, ${esc(currentUser().name)}</h1>
@@ -1419,26 +1464,7 @@ function renderHomeClient() {
   <section class="flex flex-col gap-space-sm mt-space-lg">
     <div class="flex items-center justify-between px-1"><h3 class="font-headline-md text-headline-md text-on-surface">Recent Momentum</h3></div>
     <div class="grid grid-cols-1 gap-space-sm">
-      ${recent ? `
-      <button data-action="go" data-href="#/history/session/${recent.id}" class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 text-left" type="button">
-        <div class="flex items-center gap-3 min-w-0">
-          <div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center flex-shrink-0 text-primary">${icon('task_alt','text-[26px]')}</div>
-          <div class="flex flex-col min-w-0">
-            <div class="flex items-center gap-1.5">
-              <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Last Session • ${fmtShort(recent.date)}</span>
-              <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
-              <span class="font-label-sm text-label-sm ${recent.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${recent.reviewedByTrainer?'Reviewed ✓':'Pending review'}</span>
-            </div>
-            <h4 class="font-title-md text-title-md text-on-surface truncate font-semibold">${esc(recent.sequenceName)}</h4>
-            <div class="flex items-center gap-2 mt-0.5">
-              <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(recent.durationSeconds)}</span>
-              <span class="text-outline-variant">•</span>
-              <span class="font-label-sm text-label-sm text-on-surface-variant">${sessionStats(recent).workingSets+sessionStats(recent).dropSets} sets logged</span>
-            </div>
-          </div>
-        </div>
-        ${icon('chevron_right','text-[20px] text-on-surface-variant')}
-      </button>` : ''}
+      ${recentCard}
       ${prCard}
     </div>
   </section>
@@ -1503,31 +1529,40 @@ function renderHomeTrainer() {
     </div>
     <div class="flex items-center gap-2">
       <button data-action="start-workout" data-sequence-id="${nextSeq.id}" data-scheduled-id="${next.id}" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[18px]')} Log this session</button>
+      <a href="#/sequences/${nextSeq.id}" aria-label="Edit sequence" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('edit','text-[18px]')}</a>
       <a href="#/calendar" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('calendar_today','text-[20px]')}</a>
     </div>
   </section>` : ''}
 
   <section class="flex flex-col gap-space-sm mt-space-lg">
     <div class="flex items-center justify-between px-1">
-      <h3 class="font-headline-md text-headline-md text-on-surface">Awaiting Review</h3>
-      <span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded-full font-bold">${awaiting.length}</span>
+      <div class="flex items-center gap-2">
+        <h3 class="font-headline-md text-headline-md text-on-surface">Awaiting Review</h3>
+        <span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded-full font-bold">${awaiting.length}</span>
+      </div>
+      ${awaiting.length > 1 ? `<button data-action="toggle-collapse-all-awaiting" class="h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon(awaiting.every(s=>state.ui.expandedHistoryIds['awaiting:'+s.id])?'unfold_less':'unfold_more','text-[16px]')}${awaiting.every(s=>state.ui.expandedHistoryIds['awaiting:'+s.id])?'Collapse All':'Expand All'}</button>` : ''}
     </div>
     ${awaiting.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">All caught up — nothing waiting on you.</p>` :
-      awaiting.map(s => expandableSessionRow(s)).join('')}
+      awaiting.map(s => expandableSessionRow(s, 'awaiting')).join('')}
   </section>
 
   ${recent ? `
   <section class="flex flex-col gap-space-sm mt-space-lg">
     <h3 class="font-headline-md text-headline-md text-on-surface px-1">Recent Workout</h3>
-    ${expandableSessionRow(recent)}
+    ${expandableSessionRow(recent, 'recent')}
   </section>` : ''}
   `;
 }
-function expandableSessionRow(s) {
-  const expanded = state.ui.expandedHistorySessionId === s.id;
+/* keyPrefix keeps independent sections' expand state from colliding when the
+   SAME session (same id) legitimately appears in more than one of them at
+   once — e.g. the most recent workout is also still awaiting review — so
+   expanding it in one section doesn't also expand it in the other. */
+function expandableSessionRow(s, keyPrefix) {
+  const key = `${keyPrefix}:${s.id}`;
+  const expanded = !!state.ui.expandedHistoryIds[key];
   return `
   <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-    <button data-action="toggle-history-row" data-id="${s.id}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
+    <button data-action="toggle-history-row" data-id="${key}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
       <div class="min-w-0">
         <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</span>
         <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
@@ -1763,7 +1798,7 @@ function sequenceCard(s, isTrainer) {
             <h4 ${isTrainer ? `data-action="start-inline-rename" data-id="${s.id}"` : ''} class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.name)}</h4>
             ${isDraft ? pill('Draft', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
           </div>
-          <p class="font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises${lastUsed?` • Last used ${fmtShort(lastUsed.date)}`:''}${s.createdBy?` • By ${esc(roleName(s.createdBy))}`:''}</p>
+          <p class="font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises${lastUsed?` • Last used ${fmtShort(lastUsed.date)}`:''}${s.createdBy?` • By ${esc(createdByDisplay(s))}`:''}</p>
         </button>`}
       </div>
       <button data-action="go" data-href="#/sequences/${s.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
@@ -2452,19 +2487,26 @@ function renderHistory() {
   const months = historyMonths();
   const filterMonth = (state.ui.historyFilterMonth === 'all' || months.includes(state.ui.historyFilterMonth)) ? state.ui.historyFilterMonth : 'all';
   const viewMode = filterMonth === 'all' ? 'all' : 'month';
+  const exCat = state.ui.historyExerciseCategory || 'all';
   return `
-  <div class="flex items-center justify-between pt-2 mb-space-md">
-    <h2 class="font-headline-lg text-headline-lg text-on-surface">History</h2>
-  </div>
-  <div class="flex items-center justify-between gap-2 mb-space-md flex-wrap">
-    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
-      <button data-action="history-tab" data-tab="sessions" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='sessions'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Sessions</button>
-      <button data-action="history-tab" data-tab="exercises" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='exercises'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Exercises</button>
+  <div id="history-sticky-header" class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+    <div class="flex items-center justify-between pb-2">
+      <h2 class="font-headline-lg text-headline-lg text-on-surface">History</h2>
     </div>
-    ${tab==='sessions' ? `
-    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
-      <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
-      <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
+    <div class="flex items-center justify-between gap-2 pb-2 flex-wrap">
+      <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
+        <button data-action="history-tab" data-tab="sessions" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='sessions'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Sessions</button>
+        <button data-action="history-tab" data-tab="exercises" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='exercises'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Exercises</button>
+      </div>
+      ${tab==='sessions' ? `
+      <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
+        <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
+        <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
+      </div>` : ''}
+    </div>
+    ${tab==='exercises' ? `
+    <div class="flex items-center gap-2 overflow-x-auto pb-1">
+      ${['all',...CATEGORIES].map(c=>`<button data-action="history-filter-cat" data-cat="${c}" class="flex-shrink-0 h-9 px-3 rounded-full font-label-sm text-label-sm ${exCat===c?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}" type="button">${c==='all'?'All':c}</button>`).join('')}
     </div>` : ''}
   </div>
   ${tab==='sessions' ? renderHistorySessions() : renderHistoryExercisePicker()}
@@ -2530,19 +2572,24 @@ function renderHistorySessions() {
   <div class="flex flex-col gap-space-sm">
     ${list.map(s => {
       const stats = sessionStats(s);
+      const key = 'history:' + s.id;
+      const expanded = !!state.ui.expandedHistoryIds[key];
       return `
-      <button data-action="go" data-href="#/history/session/${s.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-2" type="button">
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)}</span>
-            <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
-            <span class="font-label-sm text-label-sm ${s.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${s.reviewedByTrainer?'Reviewed':'Pending review'}</span>
+      <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+        <button data-action="toggle-history-row" data-id="${key}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)}</span>
+              <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+              <span class="font-label-sm text-label-sm ${s.reviewedByTrainer?'text-primary':'text-tertiary'} font-bold">${s.reviewedByTrainer?'Reviewed':'Pending review'}</span>
+            </div>
+            <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
+            <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(s.durationSeconds)} • ${stats.workingSets+stats.dropSets} sets • Logged by ${esc(roleName(s.performedBy))}</span>
           </div>
-          <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
-          <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtMinutes(s.durationSeconds)} • ${stats.workingSets+stats.dropSets} sets • Logged by ${esc(roleName(s.performedBy))}</span>
-        </div>
-        ${icon('chevron_right','text-[20px] text-on-surface-variant flex-shrink-0')}
-      </button>`;
+          ${icon(expanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
+        </button>
+        ${expanded ? `<div class="px-4 pb-4">${sessionDetailBody(s)}</div>` : ''}
+      </div>`;
     }).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No sessions yet.</p>`}
   </div>`;
 }
@@ -2586,9 +2633,6 @@ function renderHistoryExercisePicker() {
   const expandedId = state.ui.historyFilterExercise;
   return `
   ${renderBestProgressHighlight()}
-  <div class="flex items-center gap-2 overflow-x-auto pb-1 mb-space-md -mx-margin px-margin">
-    ${['all',...CATEGORIES].map(c=>`<button data-action="history-filter-cat" data-cat="${c}" class="flex-shrink-0 h-9 px-3 rounded-full font-label-sm text-label-sm ${cat===c?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}" type="button">${c==='all'?'All':c}</button>`).join('')}
-  </div>
   <div class="flex flex-col gap-space-sm">
     ${list.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">No exercises in this category.</p>` :
       list.map(e => {
@@ -2602,7 +2646,7 @@ function renderHistoryExercisePicker() {
             ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
           </button>`;
         if (!expanded) return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">${toggleBtn}</div>`;
-        return renderExerciseHistoryBody(e.id, toggleBtn);
+        return renderExerciseHistoryBody(e.id, toggleBtn, 'var(--history-sticky-h, 0px)');
       }).join('')}
   </div>
   `;
@@ -2635,15 +2679,18 @@ function sideDeltaHtml(currL, prevL, currR, prevR) {
   const cls = (d) => (d != null && d > 0) ? 'text-primary font-bold' : 'text-on-surface-variant';
   return `<span class="block font-label-sm text-label-sm"><span class="${cls(lD)}">${fmt(lD)}</span> / <span class="${cls(rD)}">${fmt(rD)}</span></span>`;
 }
-function renderExerciseHistoryBody(exerciseId, titleHtml) {
+function renderExerciseHistoryBody(exerciseId, titleHtml, stickyTop) {
   const ex = getExercise(exerciseId);
   const sessions = completedSessionsSorted().filter(s => s.exercises.some(e => e.exerciseId === exerciseId));
   const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
   /* titleHtml + the category line + the table's own column header all scroll
      as one sticky unit, so whichever exercise/column you're looking at stays
-     pinned above a long list of logged sessions instead of scrolling away */
+     pinned above a long list of logged sessions instead of scrolling away.
+     stickyTop lets a caller that already has its own sticky header above this
+     one (the History page's title+tabs+filters bar) offset below it instead
+     of both competing to pin at top:0. */
   const stickyHead = `
-  <div class="sticky top-0 z-10 bg-surface-container-lowest rounded-t-xl overflow-hidden">
+  <div class="sticky z-10 bg-surface-container-lowest rounded-t-xl overflow-hidden" style="top: ${stickyTop || '0px'};">
     ${titleHtml || ''}
     <div class="px-3 py-2.5 border-t border-outline-variant/20">
       <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(ex.category)} • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(ex.loadType)}</span>
@@ -2695,7 +2742,7 @@ function renderExerciseHistoryBody(exerciseId, titleHtml) {
 
     const pr = isPR(exerciseId, top, s.date);
     const extra = flat.length - 1;
-    const expanded = state.ui.expandedHistorySessionId === s.id;
+    const expanded = !!state.ui.expandedHistoryIds[s.id];
 
     return `
     <button data-action="toggle-history-row" data-id="${s.id}" type="button" class="w-full grid ${PROGRESS_GRID_COLS} gap-1.5 px-2.5 py-2.5 border-t border-outline-variant/20 items-center hover:bg-surface-container-low/60 transition-colors text-left">
@@ -3069,7 +3116,7 @@ const actions = {
   },
   'schedule-seq-change': (ds, el) => {
     if (el.value !== '__new__') return;
-    const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] };
+    const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, createdByName: myName(), exercises: [] };
     state.sequences.push(seq);
     state.ui.modal = null;
     saveState();
@@ -3111,7 +3158,7 @@ const actions = {
       if (seq) seq.exercises = s.exercises.map(sequenceExerciseFromSessionBlock);
     } else if (ds.choice === 'new') {
       const seq = getSequence(s.sequenceId);
-      const newSeq = { id: uid('seq'), name: (seq ? seq.name : s.sequenceName) + ' (Updated)', description: seq ? seq.description : '', archived:false, draft:false, createdAt: todayISO(), createdBy: state.role, exercises: s.exercises.map(sequenceExerciseFromSessionBlock) };
+      const newSeq = { id: uid('seq'), name: (seq ? seq.name : s.sequenceName) + ' (Updated)', description: seq ? seq.description : '', archived:false, draft:false, createdAt: todayISO(), createdBy: state.role, createdByName: myName(), exercises: s.exercises.map(sequenceExerciseFromSessionBlock) };
       state.sequences.push(newSeq);
     }
     finalizeActiveSession();
@@ -3174,7 +3221,7 @@ const actions = {
   'set-intensity-method': (ds) => { setPath(state, ds.basePath + '.' + (ds.key || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.valueKey || 'intensityValue'), null); saveState(); rerender(); },
   'set-intensity-value': (ds) => { setPath(state, ds.basePath + '.' + (ds.methodKey || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.key || 'intensityValue'), ds.value === 'failure' ? 'failure' : Number(ds.value)); saveState(); rerender(); },
 
-  'new-sequence': () => { state.ui.addMenuOpen = false; const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] }; state.sequences.push(seq); saveState(); navigate('#/sequences/' + seq.id); },
+  'new-sequence': () => { state.ui.addMenuOpen = false; const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, createdByName: myName(), exercises: [] }; state.sequences.push(seq); saveState(); navigate('#/sequences/' + seq.id); },
   'save-sequence-draft': (ds) => { const seq = getSequence(ds.id); seq.draft = false; saveState(); rerender(); },
   'duplicate-sequence': (ds) => { const seq = getSequence(ds.id); const copy = clone(seq); copy.id = uid('seq'); copy.name = seq.name + ' (Copy)'; copy.archived = false; copy.exercises.forEach(e => e.id = uid('sqx')); state.sequences.push(copy); saveState(); rerender(); },
   'archive-toggle': (ds) => { getSequence(ds.id).archived = !getSequence(ds.id).archived; saveState(); rerender(); },
@@ -3252,7 +3299,20 @@ const actions = {
     getSequence(ds.id).name = name;
     state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
   },
-  'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
+  'toggle-history-row': (ds) => {
+    if (state.ui.expandedHistoryIds[ds.id]) delete state.ui.expandedHistoryIds[ds.id];
+    else state.ui.expandedHistoryIds[ds.id] = true;
+    rerender();
+  },
+  'toggle-collapse-all-awaiting': () => {
+    const keys = sessionsAwaitingReview().map(s => 'awaiting:' + s.id);
+    const allExpanded = keys.length > 0 && keys.every(k => state.ui.expandedHistoryIds[k]);
+    keys.forEach(k => {
+      if (allExpanded) delete state.ui.expandedHistoryIds[k];
+      else state.ui.expandedHistoryIds[k] = true;
+    });
+    rerender();
+  },
   'toggle-seq-ex': (ds) => {
     if (state.ui.seqCollapsedIds[ds.id]) delete state.ui.seqCollapsedIds[ds.id];
     else state.ui.seqCollapsedIds[ds.id] = true;
