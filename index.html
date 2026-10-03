@@ -462,18 +462,6 @@ function otherRole() { return state.role === 'client' ? 'trainer' : 'client'; }
 function currentUser() { return state.users[state.role]; }
 function otherUser() { return state.users[otherRole()]; }
 function roleName(r) { return state.users[r].name; }
-/* "Planned by" is normally a read-only reflection of who scheduled the session.
-   Admins — who in this app are themselves a trainee tracking progress with a
-   real coach — can correct it after the fact (e.g. a session was actually
-   suggested by the coach over text, not self-scheduled) via an inline picker;
-   everyone else just sees the text. */
-function plannedByField(s) {
-  if (!state.isAdmin) return `Planned by ${esc(roleName(s.plannedBy))}`;
-  return `Planned by <select data-action="change-planned-by" data-id="${s.id}" class="inline bg-transparent border-b border-current font-inherit text-inherit align-baseline">
-    <option value="client" ${s.plannedBy==='client'?'selected':''}>${esc(state.users.client.name)}</option>
-    <option value="trainer" ${s.plannedBy==='trainer'?'selected':''}>${esc(state.users.trainer.name)}</option>
-  </select>`;
-}
 
 function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
@@ -1246,7 +1234,7 @@ function renderHomeClient() {
       </div>
       <div class="flex items-center gap-1 bg-surface-container text-on-surface-variant px-2.5 py-1 rounded-full">
         ${icon('verified','text-[14px] text-secondary')}
-        <span class="font-label-sm text-label-sm font-medium">${plannedByField(next)}</span>
+        <span class="font-label-sm text-label-sm font-medium">Planned by ${esc(roleName(next.plannedBy))}</span>
       </div>
     </div>
     <div class="flex flex-col gap-1 relative z-10">
@@ -1331,7 +1319,7 @@ function scheduleRow(s) {
       </div>
       <div class="flex flex-col min-w-0">
         <span class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(seq.name)}</span>
-        <span class="font-label-sm text-label-sm text-on-surface-variant truncate">${plannedByField(s)}</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(roleName(s.plannedBy))}</span>
       </div>
     </div>
     <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-on-surface flex-shrink-0" type="button">${icon('chevron_right','text-[20px]')}</button>
@@ -1505,7 +1493,7 @@ function dayDetailCard(s) {
       </div>
     </div>
     <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
-      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}${plannedByField(s)}</span>
+      <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(roleName(s.plannedBy))}</span>
       <span>•</span>
       <span class="flex items-center gap-1">${icon('schedule','text-[16px]')}~${Math.round(seq.exercises.reduce((a,e)=>a+e.prescription.restSeconds,0)/60)+seq.exercises.length*4}m</span>
     </div>
@@ -1539,7 +1527,7 @@ function listFeedCard(s) {
         </div>
         <div class="flex flex-col min-w-0">
           <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(seq.name)}</h4>
-          <span class="font-label-sm text-label-sm text-on-surface-variant">${plannedByField(s)}</span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant">Planned by ${esc(roleName(s.plannedBy))}</span>
         </div>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -2870,13 +2858,6 @@ const actions = {
   'set-exercise-laterality': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.laterality = el.value; saveState(); rerender(); },
   'set-exercise-category': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.category = el.value; saveState(); rerender(); },
   'set-exercise-loadtype': (ds, el) => { const ex = getExercise(ds.exerciseId); ex.loadType = el.value; saveState(); rerender(); },
-  'change-planned-by': (ds, el) => {
-    if (!state.isAdmin) return;
-    const s = state.scheduledSessions.find(x => x.id === ds.id);
-    if (!s) return;
-    s.plannedBy = el.value;
-    saveState(); rerender();
-  },
   'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); saveState(); rerender(); },
   'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
   'move-exercise': (ds) => {
