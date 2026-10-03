@@ -906,6 +906,7 @@ function renderModal() {
   else if (m.type === 'discard-confirm') inner = modalDiscardConfirm(m);
   else if (m.type === 'start-workout-pick') inner = modalStartWorkoutPick(m);
   else if (m.type === 'delete-sequence-confirm') inner = modalDeleteSequenceConfirm(m);
+  else if (m.type === 'delete-session-confirm') inner = modalDeleteSessionConfirm(m);
   else if (m.type === 'delete-exercise-confirm') inner = modalDeleteExerciseConfirm(m);
   else if (m.type === 'draft-nav-confirm') inner = modalDraftNavConfirm(m);
   else if (m.type === 'cancel-session-confirm') inner = modalCancelSessionConfirm(m);
@@ -1144,6 +1145,15 @@ function modalDeleteSequenceConfirm(m) {
       : `Delete "<span class="text-on-surface font-semibold">${esc(seq ? seq.name : '')}</span>"? This permanently removes the sequence and its exercise prescriptions. Past logged workouts and history are not affected. This can't be undone.`}</p>
   `, `
     <button data-action="delete-sequence-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">${isDraft ? 'Discard Draft' : 'Delete Sequence'}</button>
+    <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Cancel</button>
+  `);
+}
+function modalDeleteSessionConfirm(m) {
+  const s = state.workoutSessions.find(w => w.id === m.id);
+  return modalShell('Delete Logged Workout', `
+    <p class="font-body-md text-body-md text-on-surface-variant">Delete "<span class="text-on-surface font-semibold">${esc(s ? s.sequenceName : '')}</span>" logged on ${s ? esc(fmtShort(s.date)) : ''}? This permanently removes the logged sets and any progress comparisons that used it. This can't be undone.</p>
+  `, `
+    <button data-action="delete-session-confirm" data-id="${m.id}" class="w-full h-12 rounded-full bg-error text-on-error font-label-lg text-label-lg">Delete Logged Workout</button>
     <button data-action="close-modal" class="w-full h-11 rounded-full bg-transparent text-on-surface-variant font-label-md text-label-md">Cancel</button>
   `);
 }
@@ -2181,6 +2191,7 @@ function renderSessionDetail(sessionId, isSummary) {
   <div class="flex items-center gap-2 pt-2 mb-space-md">
     <a href="${backHref}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">${isSummary?'Workout Complete':esc(s.sequenceName)}</h2>
+    ${!isSummary ? `<button data-action="open-delete-session" data-id="${s.id}" aria-label="Delete logged workout" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
   </div>
 
   ${isSummary ? `
@@ -2816,6 +2827,19 @@ const actions = {
     saveState();
     const r = route();
     if (r.parts[0] === 'sequences' && r.parts[1] === ds.id) navigate('#/sequences'); else rerender();
+  },
+  'open-delete-session': (ds) => { state.ui.modal = { type: 'delete-session-confirm', id: ds.id }; rerender(); },
+  'delete-session-confirm': (ds) => {
+    state.workoutSessions = state.workoutSessions.filter(w => w.id !== ds.id);
+    /* a scheduled item that linked to this session goes back to "planned" —
+       otherwise its "View logged session" link would point at nothing */
+    state.scheduledSessions.forEach(sc => {
+      if (sc.linkedWorkoutSessionId === ds.id) { sc.status = 'planned'; sc.linkedWorkoutSessionId = null; }
+    });
+    state.ui.modal = null;
+    saveState();
+    const r = route();
+    if ((r.parts[0] === 'history' || r.parts[0] === 'summary') && r.parts.includes(ds.id)) navigate('#/history'); else rerender();
   },
   'open-delete-exercise': (ds) => { state.ui.modal = { type: 'delete-exercise-confirm', id: ds.id }; rerender(); },
   'delete-exercise-confirm': (ds) => {
