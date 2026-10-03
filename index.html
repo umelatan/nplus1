@@ -1689,7 +1689,7 @@ function renderSequenceDetail(seqId) {
   const isDraft = !!s.draft;
   const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
   return `
-  <div class="flex items-center gap-2 pt-2 mb-1">
+  <div class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-1 flex items-center gap-2 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     ${isRenaming ? `
     <input id="f-inline-rename-${s.id}" value="${esc(state.ui.inlineRenameDraft ?? s.name)}" autofocus onkeydown="if(event.key==='Enter'){actions['confirm-inline-rename']({id:'${s.id}'})}else if(event.key==='Escape'){actions['cancel-inline-rename']({})}" class="flex-1 min-w-0 h-10 px-2.5 rounded-lg bg-surface-container-low border ${state.ui.inlineRenameError?'border-error':'border-primary'} text-on-surface font-headline-lg text-headline-lg font-bold">
