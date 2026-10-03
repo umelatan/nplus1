@@ -202,7 +202,7 @@ function freshUiState() {
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
     historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null,
     libSearch:'', libCategory:'all', modal:null, expandedSeqExIdx:null, expandedHistorySessionId:null,
-    inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false,
+    inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
     theme,
@@ -1304,18 +1304,14 @@ function renderHomeClient() {
     <div class="flex flex-col gap-1 relative z-10">
       <h2 class="font-headline-lg text-headline-lg text-on-surface font-bold">${esc(nextSeq.name)}</h2>
     </div>
-    <div class="grid grid-cols-3 gap-2 py-1 relative z-10">
+    <div class="grid grid-cols-2 gap-2 py-1 relative z-10">
       <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
         <div class="flex items-center gap-1 text-on-surface-variant">${icon('format_list_bulleted','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Exercises</span></div>
         <span class="font-title-md text-title-md text-on-surface font-bold mt-1">${nextSeq.exercises.length} Moves</span>
       </div>
       <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
-        <div class="flex items-center gap-1 text-on-surface-variant">${icon('schedule','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Rest</span></div>
-        <span class="font-title-md text-title-md text-on-surface font-bold mt-1">~${Math.round(nextSeq.exercises.reduce((a,e)=>a+e.prescription.restSeconds,0)/60)}m</span>
-      </div>
-      <div class="bg-surface-container-low rounded-xl p-3 flex flex-col justify-center items-start">
-        <div class="flex items-center gap-1 text-on-surface-variant">${icon('speed','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Intensity</span></div>
-        <span class="font-title-md text-title-md text-primary font-bold mt-1">RPE ${nextSeq.exercises[0].prescription.intensityTarget}</span>
+        <div class="flex items-center gap-1 text-on-surface-variant">${icon('format_list_numbered','text-[16px]')}<span class="font-label-sm text-label-sm font-medium">Sets</span></div>
+        <span class="font-title-md text-title-md text-on-surface font-bold mt-1">${nextSeq.exercises.reduce((a,e)=>a+e.prescription.sets,0)}</span>
       </div>
     </div>
     <div class="pt-1 relative z-10">
@@ -1558,13 +1554,12 @@ function dayDetailCard(s) {
       <h4 class="font-headline-md text-headline-md text-on-surface min-w-0 truncate">${esc(seq.name)}</h4>
       <div class="flex items-center gap-1.5 flex-shrink-0">
         ${statusPill}
+        <a href="#/sequences/${seq.id}" aria-label="Edit sequence" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">${icon('edit','text-[16px]')}</a>
         ${s.status==='planned' ? `<button data-action="open-cancel-scheduled" data-id="${s.id}" aria-label="Cancel scheduled session" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container transition-colors" type="button">${icon('close','text-[18px]')}</button>` : ''}
       </div>
     </div>
     <div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md flex-wrap">
       <span class="flex items-center gap-1">${icon('person','text-[16px] text-primary')}Planned by ${esc(roleName(s.plannedBy))}</span>
-      <span>•</span>
-      <span class="flex items-center gap-1">${icon('schedule','text-[16px]')}~${Math.round(seq.exercises.reduce((a,e)=>a+e.prescription.restSeconds,0)/60)+seq.exercises.length*4}m</span>
     </div>
     <div class="flex flex-col gap-1 mt-1">
       ${sequenceExerciseListRows(seq.exercises)}
@@ -1622,7 +1617,15 @@ function renderSequencesList() {
     <h2 class="font-headline-lg text-headline-lg text-on-surface">Sequences</h2>
     <div class="flex items-center gap-2">
       <a href="#/library" class="h-10 px-3 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5">${icon('menu_book','text-[18px]')}Library</a>
-      ${isTrainer ? `<button data-action="new-sequence" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>` : ''}
+      ${isTrainer ? `
+      <div class="relative">
+        <button data-action="toggle-add-menu" aria-label="Add new" class="h-10 w-10 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">${icon('add','text-[20px]')}</button>
+        ${state.ui.addMenuOpen ? `
+        <div data-menu="add" class="absolute right-0 top-12 w-48 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/40 p-2 z-50">
+          <button data-action="new-sequence" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">${icon('fitness_center','text-[18px] text-on-surface-variant')}<span class="font-label-md text-label-md text-on-surface">New Sequence</span></button>
+          <button data-action="open-new-exercise" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-container text-left" type="button">${icon('add_circle','text-[18px] text-on-surface-variant')}<span class="font-label-md text-label-md text-on-surface">New Exercise</span></button>
+        </div>` : ''}
+      </div>` : ''}
     </div>
   </div>
   ${drafts.length ? `
@@ -2657,6 +2660,7 @@ function rerender() { const f = captureFocus(); render(); restoreFocus(f); }
 const actions = {
   'go': (ds) => navigate(ds.href),
   'toggle-profile-menu': () => { state.ui.profileMenuOpen = !state.ui.profileMenuOpen; rerender(); },
+  'toggle-add-menu': () => { state.ui.addMenuOpen = !state.ui.addMenuOpen; rerender(); },
   'switch-trainee': (ds) => {
     state.role = 'trainer'; state.ui.profileMenuOpen = false;
     setViewingTrainee(ds.uid, ds.name);
@@ -2903,7 +2907,7 @@ const actions = {
   'set-intensity-method': (ds) => { setPath(state, ds.basePath + '.' + (ds.key || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.valueKey || 'intensityValue'), null); saveState(); rerender(); },
   'set-intensity-value': (ds) => { setPath(state, ds.basePath + '.' + (ds.methodKey || 'intensityMethod'), ds.method); setPath(state, ds.basePath + '.' + (ds.key || 'intensityValue'), ds.value === 'failure' ? 'failure' : Number(ds.value)); saveState(); rerender(); },
 
-  'new-sequence': () => { const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] }; state.sequences.push(seq); saveState(); navigate('#/sequences/' + seq.id); },
+  'new-sequence': () => { state.ui.addMenuOpen = false; const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] }; state.sequences.push(seq); saveState(); navigate('#/sequences/' + seq.id); },
   'save-sequence-draft': (ds) => { const seq = getSequence(ds.id); seq.draft = false; saveState(); rerender(); },
   'duplicate-sequence': (ds) => { const seq = getSequence(ds.id); const copy = clone(seq); copy.id = uid('seq'); copy.name = seq.name + ' (Copy)'; copy.archived = false; copy.exercises.forEach(e => e.id = uid('sqx')); state.sequences.push(copy); saveState(); rerender(); },
   'archive-toggle': (ds) => { getSequence(ds.id).archived = !getSequence(ds.id).archived; saveState(); rerender(); },
@@ -3005,6 +3009,7 @@ const actions = {
     state.ui.modal = null; saveState(); rerender();
   },
   'open-new-exercise': (ds) => {
+    state.ui.addMenuOpen = false;
     const prev = state.ui.modal;
     state.ui.modal = { type: 'new-exercise', seqId: ds.seqId || (prev && prev.seqId) || '',
       mode: ds.mode || (prev && prev.mode) || '', exIdx: (ds.exIdx !== undefined && ds.exIdx !== '') ? ds.exIdx : (prev && prev.exIdx) };
@@ -3092,6 +3097,7 @@ document.addEventListener('click', (e) => {
   // open). Selects are driven by the 'change' listener below instead.
   if (!el || el.tagName === 'SELECT') {
     if (!el && state.ui.profileMenuOpen && !e.target.closest('header')) { state.ui.profileMenuOpen = false; rerender(); }
+    if (!el && state.ui.addMenuOpen && !e.target.closest('[data-menu="add"]')) { state.ui.addMenuOpen = false; rerender(); }
     return;
   }
   e.preventDefault();
