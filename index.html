@@ -205,7 +205,7 @@ function freshUiState() {
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
-    seqDirty:false, seqDirtyFor:null, toast:null,
+    seqDirty:false, seqDirtyFor:null, toast:null, expandedUpcomingId:null,
     theme,
   };
 }
@@ -1383,19 +1383,23 @@ function scheduleRow(s) {
   const seq = getSequence(s.sequenceId);
   const d = new Date(s.date + 'T00:00:00');
   const wd = ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()];
+  const expanded = state.ui.expandedUpcomingId === s.id;
   return `
-  <div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex items-center justify-between gap-2">
-    <div class="flex items-center gap-3 min-w-0">
-      <div class="w-11 h-11 rounded-lg bg-surface-container-low flex flex-col items-center justify-center flex-shrink-0">
-        <span class="font-label-sm text-label-sm text-on-surface-variant font-medium leading-none">${wd}</span>
-        <span class="font-title-md text-title-md text-on-surface font-bold leading-none mt-1">${d.getDate()}</span>
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+    <button data-action="toggle-home-upcoming" data-id="${s.id}" class="w-full p-3.5 flex items-center justify-between gap-2 text-left" type="button">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-11 h-11 rounded-lg bg-surface-container-low flex flex-col items-center justify-center flex-shrink-0">
+          <span class="font-label-sm text-label-sm text-on-surface-variant font-medium leading-none">${wd}</span>
+          <span class="font-title-md text-title-md text-on-surface font-bold leading-none mt-1">${d.getDate()}</span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(seq.name)}</span>
+          <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(roleName(s.plannedBy))}</span>
+        </div>
       </div>
-      <div class="flex flex-col min-w-0">
-        <span class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(seq.name)}</span>
-        <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Planned by ${esc(roleName(s.plannedBy))}</span>
-      </div>
-    </div>
-    <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-on-surface flex-shrink-0" type="button">${icon('chevron_right','text-[20px]')}</button>
+      ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
+    </button>
+    ${expanded ? `<div class="px-3.5 pb-3.5">${dayDetailCard(s)}</div>` : ''}
   </div>`;
 }
 
@@ -2991,6 +2995,7 @@ const actions = {
     state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
   },
   'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
+  'toggle-home-upcoming': (ds) => { state.ui.expandedUpcomingId = state.ui.expandedUpcomingId === ds.id ? null : ds.id; rerender(); },
   'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
   'save-sequence-changes': () => { state.ui.seqDirty = false; showToast('Changes saved'); },
   'add-exercise-confirm': (ds) => {
