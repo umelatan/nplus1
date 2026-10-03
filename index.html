@@ -509,7 +509,16 @@ function roleName(r) { return state.users[r].name; }
    wrong the moment a trainee gets reassigned to a different trainer. Newly created
    scheduled sessions also snapshot the planner's actual name (plannedByName);
    older records without one fall back to the old role-lookup behavior. */
-function plannedByDisplay(s) { return s.plannedByName || roleName(s.plannedBy); }
+function plannedByDisplay(s) {
+  if (s.plannedByName) return s.plannedByName;
+  /* legacy records (scheduled before plannedByName existed) only stored the
+     planner's ROLE, not their identity — resolving "trainer" through the
+     CURRENT trainer assignment misattributes it to whoever is assigned now,
+     which can be a completely different person than who actually scheduled
+     it. 'client' is safe to resolve live: a scheduled item only ever belongs
+     to one trainee's own data tree, so that mapping never actually changes. */
+  return s.plannedBy === 'trainer' ? 'Trainer' : roleName(s.plannedBy);
+}
 
 function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
@@ -1489,6 +1498,9 @@ function renderHomeTrainer() {
       <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(next.date)}</span>
     </div>
     <h2 class="font-headline-lg text-headline-lg text-on-surface font-bold">${esc(nextSeq.name)}</h2>
+    <div class="flex flex-col gap-1">
+      ${sequenceExerciseListRows(nextSeq.exercises)}
+    </div>
     <div class="flex items-center gap-2">
       <button data-action="start-workout" data-sequence-id="${nextSeq.id}" data-scheduled-id="${next.id}" class="flex-1 h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[18px]')} Log this session</button>
       <a href="#/calendar" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('calendar_today','text-[20px]')}</a>
@@ -1794,8 +1806,12 @@ function renderSequenceDetail(seqId) {
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   const isDraft = !!s.draft;
   const isRenaming = isTrainer && state.ui.inlineRenameSeqId === s.id;
+  const showSaveChanges = isTrainer && !isDraft && dirty;
   const addBtn = isTrainer ? `<button data-action="open-add-exercise" data-seq-id="${s.id}" class="w-full h-12 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>` : '';
-  const saveChangesBtn = (isTrainer && !isDraft && dirty) ? `<button data-action="save-sequence-changes" data-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('check_circle','text-[20px]')}Save Changes</button>` : '';
+  const saveChangesBtn = showSaveChanges ? `<button data-action="save-sequence-changes" data-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('check_circle','text-[20px]')}Save Changes</button>` : '';
+  const addSaveRow = showSaveChanges
+    ? `<div class="grid grid-cols-2 gap-2">${addBtn}${saveChangesBtn}</div>`
+    : addBtn;
   const primaryBtns = isDraft ? `
     <button data-action="save-sequence-draft" data-id="${s.id}" ${s.exercises.length===0?'disabled':''} class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 disabled:opacity-40" type="button">${icon('check_circle','text-[20px]')}Save Sequence</button>
     ${s.exercises.length===0 ? `<p class="font-label-sm text-label-sm text-on-surface-variant text-center">Add at least one exercise before saving.</p>` : ''}
@@ -1830,8 +1846,7 @@ function renderSequenceDetail(seqId) {
   </div>
 
   <div class="sticky z-20 -mx-margin px-margin pt-3 flex flex-col gap-2 bg-surface" style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); padding-bottom: 0.75rem;">
-    ${addBtn}
-    ${saveChangesBtn}
+    ${addSaveRow}
     ${primaryBtns}
   </div>
   `;
@@ -2578,17 +2593,16 @@ function renderHistoryExercisePicker() {
     ${list.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">No exercises in this category.</p>` :
       list.map(e => {
         const expanded = expandedId === e.id;
-        return `
-        <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-          <button data-action="history-toggle-exercise" data-id="${e.id}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
+        const toggleBtn = `
+          <button data-action="history-toggle-exercise" data-id="${e.id}" class="w-full text-left p-4 flex items-center justify-between gap-2 bg-surface-container-lowest" type="button">
             <div class="min-w-0">
               <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(e.name)}</h4>
               <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)}</span>
             </div>
             ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
-          </button>
-          ${expanded ? `<div class="px-4 pb-4">${renderExerciseHistoryBody(e.id)}</div>` : ''}
-        </div>`;
+          </button>`;
+        if (!expanded) return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">${toggleBtn}</div>`;
+        return renderExerciseHistoryBody(e.id, toggleBtn);
       }).join('')}
   </div>
   `;
@@ -2596,12 +2610,14 @@ function renderHistoryExercisePicker() {
 
 function renderExerciseHistory(exerciseId) {
   state.ui.historyFilterExercise = exerciseId;
-  return `
-  <div class="flex items-center gap-2 pt-2 mb-space-md">
+  const titleRow = `
+  <div class="flex items-center gap-2 p-4 bg-surface-container-lowest">
     <a href="#/history" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1 truncate">${esc(getExercise(exerciseId).name)}</h2>
-  </div>
-  ${renderExerciseHistoryBody(exerciseId)}
+  </div>`;
+  return `
+  <div class="pt-2"></div>
+  ${renderExerciseHistoryBody(exerciseId, titleRow)}
   `;
 }
 
@@ -2619,12 +2635,31 @@ function sideDeltaHtml(currL, prevL, currR, prevR) {
   const cls = (d) => (d != null && d > 0) ? 'text-primary font-bold' : 'text-on-surface-variant';
   return `<span class="block font-label-sm text-label-sm"><span class="${cls(lD)}">${fmt(lD)}</span> / <span class="${cls(rD)}">${fmt(rD)}</span></span>`;
 }
-function renderExerciseHistoryBody(exerciseId) {
+function renderExerciseHistoryBody(exerciseId, titleHtml) {
   const ex = getExercise(exerciseId);
   const sessions = completedSessionsSorted().filter(s => s.exercises.some(e => e.exerciseId === exerciseId));
-  if (!sessions.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No logged history for this exercise yet.</p>`;
-  const chronoAsc = [...sessions].reverse();
   const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
+  /* titleHtml + the category line + the table's own column header all scroll
+     as one sticky unit, so whichever exercise/column you're looking at stays
+     pinned above a long list of logged sessions instead of scrolling away */
+  const stickyHead = `
+  <div class="sticky top-0 z-10 bg-surface-container-lowest rounded-t-xl overflow-hidden">
+    ${titleHtml || ''}
+    <div class="px-3 py-2.5 border-t border-outline-variant/20">
+      <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(ex.category)} • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(ex.loadType)}</span>
+    </div>
+    <div class="grid ${PROGRESS_GRID_COLS} gap-1.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant border-t border-outline-variant/20">
+      <div class="truncate">Date</div><div class="truncate">Weight</div><div class="truncate">Reps</div><div class="truncate">RPE</div>
+    </div>
+  </div>`;
+  if (!sessions.length) {
+    return `
+    <div class="bg-surface-container-lowest rounded-xl shadow-sm">
+      ${stickyHead}
+      <p class="font-body-md text-body-md text-on-surface-variant p-4 rounded-b-xl">No logged history for this exercise yet.</p>
+    </div>`;
+  }
+  const chronoAsc = [...sessions].reverse();
 
   const rows = sessions.map((s) => {
     const block = s.exercises.find(e => e.exerciseId === exerciseId);
@@ -2697,14 +2732,11 @@ function renderExerciseHistoryBody(exerciseId) {
   }).join('');
 
   return `
-  <div class="bg-surface-container-low rounded-xl p-3 mb-space-md flex items-center gap-3">
-    <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(ex.category)} • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'} • ${loadTypeLabel(ex.loadType)}</span>
-  </div>
-  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-    <div class="grid ${PROGRESS_GRID_COLS} gap-1.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-      <div class="truncate">Date</div><div class="truncate">Weight</div><div class="truncate">Reps</div><div class="truncate">RPE</div>
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm">
+    ${stickyHead}
+    <div class="rounded-b-xl overflow-hidden">
+      ${rows || `<p class="font-body-md text-body-md text-on-surface-variant p-4">No completed sets logged yet.</p>`}
     </div>
-    ${rows || `<p class="font-body-md text-body-md text-on-surface-variant p-4">No completed sets logged yet.</p>`}
   </div>
   <p class="font-label-sm text-label-sm text-on-surface-variant mt-2 px-1">Showing the top working set per workout. Tap a row for the full log, including drop sets.</p>
   `;
