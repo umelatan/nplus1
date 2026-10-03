@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>N+1 — Tandem Strength Prototype</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
@@ -42,6 +42,20 @@ html.dark{
 *{ -webkit-tap-highlight-color: transparent; }
 html,body{ margin:0; padding:0; }
 body{ overscroll-behavior:none; font-variant-numeric: tabular-nums; }
+/* mobile browsers auto-zoom a focused input/select/textarea whose font-size is
+   under 16px — several of this app's fields use smaller Tailwind text sizes
+   for their styling, so force 16px specifically to stop that (needs
+   !important: a Tailwind utility class like font-body-md has higher CSS
+   specificity than a bare element selector and would otherwise win). */
+input, select, textarea{ font-size: 16px !important; }
+/* belt-and-braces against double-tap-to-zoom, on top of the viewport meta's
+   user-scalable=no — also removes the old ~300ms tap delay on touch devices */
+html{ touch-action: manipulation; }
+/* rapid tapping/typing during a workout shouldn't pop up text-selection
+   handles on labels, numbers, buttons, etc. — still allowed inside the
+   fields people actually type into */
+body{ -webkit-user-select: none; user-select: none; }
+input, textarea, [contenteditable]{ -webkit-user-select: text; user-select: text; }
 ::-webkit-scrollbar{ display:none; }
 *{ scrollbar-width:none; }
 .pb-safe{ padding-bottom: env(safe-area-inset-bottom,0px); }
