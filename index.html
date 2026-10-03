@@ -200,7 +200,7 @@ function freshUiState() {
   try { theme = localStorage.getItem('n1_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch(e) {}
   return {
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
-    historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null,
+    historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null, historyMonthPickerOpen:false,
     libSearch:'', libCategory:'all', modal:null, expandedHistorySessionId:null,
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
@@ -2357,16 +2357,31 @@ function renderHistorySessions() {
   const months = historyMonths();
   /* tolerate a missing/invalid saved filter (e.g. from an older app version) instead of crashing */
   const filterMonth = (state.ui.historyFilterMonth === 'all' || months.includes(state.ui.historyFilterMonth)) ? state.ui.historyFilterMonth : 'all';
+  const viewMode = filterMonth === 'all' ? 'all' : 'month';
   const list = allSessions.filter(s => filterMonth==='all' || monthKey(s.date)===filterMonth);
   const idx = months.indexOf(filterMonth);
   const canPrev = filterMonth !== 'all' && idx < months.length - 1;
   const canNext = filterMonth !== 'all' && idx > 0;
   return `
+  <div class="flex items-center justify-center mb-space-sm">
+    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm">
+      <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
+      <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
+    </div>
+  </div>
+  ${viewMode==='month' ? `
   <div class="flex items-center justify-center gap-3 mb-space-md">
     <button data-action="history-month-prev" ${canPrev?'':'disabled'} aria-label="Older month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_left','text-[20px]')}</button>
-    <button data-action="history-month-toggle" class="h-9 px-4 rounded-full bg-surface-container text-on-surface font-label-md text-label-md font-semibold min-w-[130px] text-center" type="button">${filterMonth==='all' ? 'All Months' : monthLabel(filterMonth)}</button>
+    <div class="relative">
+      <button data-action="toggle-history-month-picker" class="h-9 px-4 rounded-full bg-surface-container text-on-surface font-label-md text-label-md font-semibold min-w-[130px] text-center flex items-center justify-center gap-1" type="button">${monthLabel(filterMonth)}${icon(state.ui.historyMonthPickerOpen?'expand_less':'expand_more','text-[18px] text-on-surface-variant')}</button>
+      ${state.ui.historyMonthPickerOpen ? `
+      <div data-menu="history-month-picker" class="absolute left-1/2 -translate-x-1/2 top-11 w-44 max-h-64 overflow-y-auto bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/40 p-1.5 z-50">
+        ${months.map(m => `<button data-action="history-month-pick" data-month="${m}" class="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-container font-label-md text-label-md ${m===filterMonth?'text-primary font-bold':'text-on-surface'}" type="button">${monthLabel(m)}</button>`).join('')}
+      </div>` : ''}
+    </div>
     <button data-action="history-month-next" ${canNext?'':'disabled'} aria-label="Newer month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_right','text-[20px]')}</button>
   </div>
+  ` : ''}
   <div class="flex flex-col gap-space-sm">
     ${list.map(s => {
       const stats = sessionStats(s);
@@ -3094,11 +3109,14 @@ const actions = {
 
   'lib-filter-cat': (ds) => { state.ui.libCategory = ds.cat; rerender(); },
   'history-tab': (ds) => { state.ui.historyTab = ds.tab; rerender(); },
-  'history-month-toggle': () => {
+  'history-view-mode': (ds) => {
     const months = historyMonths();
-    state.ui.historyFilterMonth = state.ui.historyFilterMonth === 'all' ? (months[0] || 'all') : 'all';
+    state.ui.historyFilterMonth = ds.mode === 'all' ? 'all' : (months[0] || 'all');
+    state.ui.historyMonthPickerOpen = false;
     rerender();
   },
+  'toggle-history-month-picker': () => { state.ui.historyMonthPickerOpen = !state.ui.historyMonthPickerOpen; rerender(); },
+  'history-month-pick': (ds) => { state.ui.historyFilterMonth = ds.month; state.ui.historyMonthPickerOpen = false; rerender(); },
   'history-month-prev': () => {
     const months = historyMonths();
     const idx = months.indexOf(state.ui.historyFilterMonth);
@@ -3144,6 +3162,7 @@ document.addEventListener('click', (e) => {
   if (!el || el.tagName === 'SELECT') {
     if (!el && state.ui.profileMenuOpen && !e.target.closest('header')) { state.ui.profileMenuOpen = false; rerender(); }
     if (!el && state.ui.addMenuOpen && !e.target.closest('[data-menu="add"]')) { state.ui.addMenuOpen = false; rerender(); }
+    if (!el && state.ui.historyMonthPickerOpen && !e.target.closest('[data-menu="history-month-picker"]')) { state.ui.historyMonthPickerOpen = false; rerender(); }
     return;
   }
   e.preventDefault();
