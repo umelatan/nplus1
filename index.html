@@ -897,6 +897,7 @@ function renderModal() {
   if (m.type === 'schedule') inner = modalSchedule(m);
   else if (m.type === 'reschedule') inner = modalReschedule(m);
   else if (m.type === 'edit-session-date') inner = modalEditSessionDate(m);
+  else if (m.type === 'edit-session-exercise') inner = modalEditSessionExercise(m);
   else if (m.type === 'swap-sequence') inner = modalSwapSequence(m);
   else if (m.type === 'add-exercise-to-sequence') inner = modalAddExerciseToSequence(m);
   else if (m.type === 'session-exercise-picker') inner = modalSessionExercisePicker(m);
@@ -1002,6 +1003,26 @@ function modalEditSessionDate(m) {
       ${miniDatePicker(m)}
     </div>
   `, `<button data-action="edit-session-date-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Date</button>`);
+}
+function modalEditSessionExercise(m) {
+  const ex = state.activeSession.exercises[m.exIdx];
+  return modalShell('Edit Exercise', `
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Body area</span>
+      <select data-action="set-session-exercise-category" data-ex-idx="${m.exIdx}" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+        ${CATEGORIES.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </label>
+    <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Load type</span>
+      <select data-action="set-session-exercise-loadtype" data-ex-idx="${m.exIdx}" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">
+        <option value="single_total" ${ex.loadType==='single_total'?'selected':''}>Single total</option>
+        <option value="per_side" ${ex.loadType==='per_side'?'selected':''}>Per side (hand, leg, etc.)</option>
+        <option value="machine_stack" ${ex.loadType==='machine_stack'?'selected':''}>Machine/cable stack</option>
+        <option value="bodyweight" ${ex.loadType==='bodyweight'?'selected':''}>Bodyweight</option>
+        <option value="assisted" ${ex.loadType==='assisted'?'selected':''}>Assisted</option>
+      </select>
+    </label>
+    <p class="font-label-sm text-label-sm text-on-surface-variant -mb-1">Also updates this exercise's defaults for future sessions.</p>
+  `, `<button data-action="close-modal" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Done</button>`);
 }
 function modalSwapSequence(m) {
   const opts = state.sequences.filter(s=>!s.archived && !s.draft).map(s=>`<option value="${s.id}" ${s.id===m.sequenceId?'selected':''}>${esc(s.name)}</option>`).join('');
@@ -1965,7 +1986,10 @@ function renderWorkoutExercise(ex, exIdx, session) {
         </div>
         <h3 class="font-headline-lg text-headline-lg text-on-surface mt-1 tracking-tight">${esc(ex.nameSnapshot.toUpperCase())}</h3>
       </div>
-      <button data-action="open-swap-exercise-session" data-ex-idx="${exIdx}" class="flex-shrink-0 h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('swap_horiz','text-[16px]')}Swap</button>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button data-action="open-edit-session-exercise" data-ex-idx="${exIdx}" aria-label="Edit category and load type" class="w-9 h-9 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center" type="button">${icon('edit','text-[16px]')}</button>
+        <button data-action="open-swap-exercise-session" data-ex-idx="${exIdx}" class="h-9 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('swap_horiz','text-[16px]')}Swap</button>
+      </div>
     </div>
     <div class="flex items-center gap-2 mb-3">
       <span class="font-label-sm text-label-sm text-on-surface-variant">Tracking</span>
@@ -2945,6 +2969,19 @@ const actions = {
        own Tracking selector — so future sessions start with the right shape */
     const libEx = getExercise(ex.exerciseId);
     if (libEx) libEx.laterality = ex.laterality;
+    saveState(); rerender();
+  },
+  'open-edit-session-exercise': (ds) => { state.ui.modal = { type: 'edit-session-exercise', exIdx: Number(ds.exIdx) }; rerender(); },
+  'set-session-exercise-category': (ds, el) => {
+    const ex = state.activeSession.exercises[Number(ds.exIdx)];
+    ex.category = el.value;
+    const libEx = getExercise(ex.exerciseId); if (libEx) libEx.category = el.value;
+    saveState(); rerender();
+  },
+  'set-session-exercise-loadtype': (ds, el) => {
+    const ex = state.activeSession.exercises[Number(ds.exIdx)];
+    ex.loadType = el.value;
+    const libEx = getExercise(ex.exerciseId); if (libEx) libEx.loadType = el.value;
     saveState(); rerender();
   },
   'session-exercise-pick-confirm': (ds) => {
