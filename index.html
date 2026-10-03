@@ -217,7 +217,7 @@ function freshUiState() {
   try { theme = localStorage.getItem('n1_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch(e) {}
   return {
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), calSelectedDate: todayISO(), calView:'month',
-    historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null, historyMonthPickerOpen:false,
+    historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null, historyMonthPickerOpen:false, historyExerciseCategory:'all',
     libSearch:'', libCategory:'all', modal:null, expandedHistorySessionId:null,
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
@@ -1041,7 +1041,7 @@ function modalSchedule(m) {
     </div>
     <label class="flex flex-col gap-1">
       <span class="font-label-md text-label-md text-on-surface-variant">Sequence</span>
-      <select id="f-seq" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">${seqOptions}</select>
+      <select id="f-seq" data-action="schedule-seq-change" class="h-12 px-3 rounded-lg bg-surface-container-low text-on-surface border border-outline-variant/40">${seqOptions}<option value="__new__">+ Create New Sequence</option></select>
     </label>
   `, `<button data-action="schedule-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Schedule</button>`);
 }
@@ -1152,14 +1152,14 @@ function modalNewExercise(m) {
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default sets <span class="text-on-surface-variant/60">(optional)</span></span>
         <div class="flex items-center gap-1">
           <button data-action="step-input" data-target="nf-sets" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
-          <input id="nf-sets" type="text" inputmode="numeric" placeholder="e.g. 3" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
+          <input id="nf-sets" type="text" inputmode="numeric" value="0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
           <button data-action="step-input" data-target="nf-sets" data-dir="1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
         </div>
       </label>
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
         <div class="flex items-center gap-1">
           <button data-action="step-input" data-target="nf-drops" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
-          <input id="nf-drops" type="text" inputmode="numeric" placeholder="e.g. 0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
+          <input id="nf-drops" type="text" inputmode="numeric" value="0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
           <button data-action="step-input" data-target="nf-drops" data-dir="1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
         </div>
       </label>
@@ -1472,28 +1472,29 @@ function renderHomeTrainer() {
       <span class="font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded-full font-bold">${awaiting.length}</span>
     </div>
     ${awaiting.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">All caught up — nothing waiting on you.</p>` :
-      awaiting.map(s => `
-      <button data-action="go" data-href="#/history/session/${s.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between gap-2" type="button">
-        <div class="min-w-0">
-          <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</span>
-          <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
-        </div>
-        ${icon('chevron_right','text-[20px] text-on-surface-variant flex-shrink-0')}
-      </button>`).join('')}
+      awaiting.map(s => expandableSessionRow(s)).join('')}
   </section>
 
   ${recent ? `
   <section class="flex flex-col gap-space-sm mt-space-lg">
     <h3 class="font-headline-md text-headline-md text-on-surface px-1">Recent Workout</h3>
-    <button data-action="go" data-href="#/history/session/${recent.id}" class="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between" type="button">
-      <div class="min-w-0">
-        <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(recent.date)}</span>
-        <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(recent.sequenceName)}</h4>
-      </div>
-      ${icon('chevron_right','text-[20px] text-on-surface-variant')}
-    </button>
+    ${expandableSessionRow(recent)}
   </section>` : ''}
   `;
+}
+function expandableSessionRow(s) {
+  const expanded = state.ui.expandedHistorySessionId === s.id;
+  return `
+  <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+    <button data-action="toggle-history-row" data-id="${s.id}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
+      <div class="min-w-0">
+        <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</span>
+        <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
+      </div>
+      ${icon(expanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
+    </button>
+    ${expanded ? `<div class="px-4 pb-4">${sessionDetailBody(s)}</div>` : ''}
+  </div>`;
 }
 
 /* ================= CALENDAR ================= */
@@ -1636,13 +1637,14 @@ function listFeedCard(s) {
   const seq = getSequence(s.sequenceId);
   const d = new Date(s.date+'T00:00:00');
   const wd = ['SUN','MON','TUE','WED','THU','FRI','SAT'][d.getDay()];
+  const expanded = state.ui.expandedUpcomingId === s.id;
   return `
-  <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col gap-3">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-xl bg-secondary-fixed/50 flex flex-col items-center justify-center text-center">
-          <span class="font-label-sm text-label-sm text-on-secondary-fixed-variant leading-none">${wd}</span>
-          <span class="font-title-md text-title-md font-bold text-on-secondary-fixed leading-tight">${d.getDate()}</span>
+  <div class="bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden">
+    <button data-action="toggle-home-upcoming" data-id="${s.id}" class="w-full p-space-md flex items-center justify-between gap-2 text-left" type="button">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-12 h-12 rounded-xl bg-surface-container-low flex flex-col items-center justify-center text-center flex-shrink-0">
+          <span class="font-label-sm text-label-sm text-on-surface-variant leading-none">${wd}</span>
+          <span class="font-title-md text-title-md font-bold text-on-surface leading-tight">${d.getDate()}</span>
         </div>
         <div class="flex flex-col min-w-0">
           <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(seq.name)}</h4>
@@ -1651,13 +1653,13 @@ function listFeedCard(s) {
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
         ${pill('Planned','bg-surface-container text-on-surface-variant')}
-        <button data-action="open-cancel-scheduled" data-id="${s.id}" aria-label="Cancel scheduled session" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container transition-colors" type="button">${icon('close','text-[18px]')}</button>
+        ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant')}
       </div>
-    </div>
-    <div class="flex items-center justify-between pt-2 bg-surface-container-low/40 rounded-xl px-3 py-2">
-      <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>getExercise(sx.exerciseId)).filter(Boolean).map(ex=>esc(ex.name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
-      <button data-action="go" data-href="#/calendar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
-    </div>
+    </button>
+    ${expanded ? `<div class="px-space-md pb-space-md">${dayDetailCard(s)}</div>` : `
+    <div class="px-space-md pb-space-md">
+      <div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm truncate bg-surface-container-low/40 rounded-xl px-3 py-2">${icon('fitness_center','text-[16px]')}<span class="truncate">${seq.exercises.slice(0,3).map(sx=>getExercise(sx.exerciseId)).filter(Boolean).map(ex=>esc(ex.name)).join(', ')}${seq.exercises.length>3?` (+${seq.exercises.length-3})`:''}</span></div>
+    </div>`}
   </div>`;
 }
 
@@ -2263,8 +2265,8 @@ function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex) {
 /* ================= SESSION DETAIL / SUMMARY (read-only) ================= */
 /* ---- shared glanceable table (Workout | Weight | Reps | Notes) for history/summary review ---- */
 function tableHeaderRow() {
-  return `<div class="grid grid-cols-[2fr_0.9fr_0.9fr_0.9fr] gap-3 px-3 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
-    <div>Workout</div><div class="text-right">Weight</div><div class="text-right">Reps</div><div class="text-right">RPE</div>
+  return `<div class="grid grid-cols-[1.9fr_0.85fr_0.75fr_0.8fr] gap-1.5 px-2.5 py-2 bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">
+    <div class="truncate">Workout</div><div class="text-right truncate">Weight</div><div class="text-right truncate">Reps</div><div class="text-right truncate">RPE</div>
   </div>`;
 }
 function intensityBadgeHtml(set, isUni) {
@@ -2275,33 +2277,29 @@ function intensityBadgeHtml(set, isUni) {
 }
 function tableDataRow({ label, labelSub, badge, weight, weightUnit, reps, noteBadge, dim, href }) {
   const Tag = href ? 'a' : 'div';
-  return `<${Tag} ${href ? `href="${href}"` : ''} class="grid grid-cols-[2fr_0.9fr_0.9fr_0.9fr] gap-3 px-3 py-2.5 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
+  return `<${Tag} ${href ? `href="${href}"` : ''} class="grid grid-cols-[1.9fr_0.85fr_0.75fr_0.8fr] gap-1.5 px-2.5 py-2 border-t border-outline-variant/20 items-start ${dim ? 'opacity-70' : ''} ${href ? 'hover:bg-surface-container-low/60 transition-colors' : ''}">
     <div class="min-w-0">
       <div class="flex items-center gap-1 flex-wrap">
-        <span class="font-label-md text-label-md text-on-surface">${label}</span>
+        <span class="font-label-md text-label-md text-on-surface truncate">${label}</span>
         ${badge || ''}
       </div>
-      ${labelSub ? `<span class="block font-label-sm text-label-sm text-on-surface-variant">${labelSub}</span>` : ''}
+      ${labelSub ? `<span class="block font-label-sm text-label-sm text-on-surface-variant truncate">${labelSub}</span>` : ''}
     </div>
-    <div class="font-numeric-metric text-numeric-metric text-on-surface whitespace-nowrap text-right">${weight != null ? weight : '–'}${(weight != null && weightUnit) ? `<span class="text-label-sm font-body-md text-on-surface-variant ml-0.5">${weightUnit}</span>` : ''}</div>
-    <div class="min-w-0 text-right"><span class="font-body-md text-body-md text-on-surface">${reps}</span></div>
-    <div class="font-label-sm text-label-sm text-on-surface-variant min-w-0 text-right">${noteBadge || '–'}</div>
+    <div class="min-w-0 truncate text-[15px] font-bold text-on-surface text-right leading-tight">${weight != null ? weight : '–'}${(weight != null && weightUnit) ? `<span class="text-[9px] font-medium text-on-surface-variant ml-0.5">${weightUnit}</span>` : ''}</div>
+    <div class="min-w-0 truncate text-right"><span class="font-label-md text-label-md text-on-surface">${reps}</span></div>
+    <div class="font-label-sm text-label-sm text-on-surface-variant min-w-0 truncate text-right">${noteBadge || '–'}</div>
   </${Tag}>`;
 }
 function tableGroupHeader(name, badge) {
-  return `<div class="px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low/50 flex items-center gap-1.5">
-    <span class="font-label-lg text-label-lg text-on-surface font-bold">${name}</span>
+  return `<div class="px-2.5 py-2 border-t border-outline-variant/20 bg-surface-container-low/50 flex items-center gap-1.5 min-w-0">
+    <span class="font-label-lg text-label-lg text-on-surface font-bold truncate">${name}</span>
     ${badge || ''}
   </div>`;
 }
 function tableWrap(rowsHtml) {
   return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-    <div class="overflow-x-auto">
-      <div class="min-w-[420px]">
-        ${tableHeaderRow()}
-        ${rowsHtml}
-      </div>
-    </div>
+    ${tableHeaderRow()}
+    ${rowsHtml}
   </div>`;
 }
 function renderSessionTable(session) {
@@ -2329,9 +2327,10 @@ function renderSessionTable(session) {
   return tableWrap(groups.join(''));
 }
 
-function renderSessionDetail(sessionId, isSummary) {
-  const s = state.workoutSessions.find(w => w.id === sessionId);
-  if (!s) return `<p class="text-on-surface-variant pt-8">Session not found.</p>`;
+/* shared body (stats/progress/review button/table) used by the full Session
+   Detail page and by inline-expanded session rows (Home's Awaiting Review /
+   Recent Workout, trainer view) so both stay in sync */
+function sessionDetailBody(s) {
   const stats = sessionStats(s);
   const comparisons = [];
   for (const ex of s.exercises) {
@@ -2340,21 +2339,7 @@ function renderSessionDetail(sessionId, isSummary) {
     const cmp = prev ? compareTopSetFull(topWorkingSet(prev.block), top) : null;
     if (cmp) comparisons.push({ name: ex.nameSnapshot, ...cmp });
   }
-  const backHref = isSummary ? '#/home' : '#/history';
   return `
-  <div class="flex items-center gap-2 pt-2 mb-space-md">
-    <a href="${backHref}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
-    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">${isSummary?'Workout Complete':esc(s.sequenceName)}</h2>
-    ${!isSummary ? `<button data-action="open-delete-session" data-id="${s.id}" aria-label="Delete logged workout" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
-  </div>
-
-  ${isSummary ? `
-  <div class="bg-primary rounded-2xl p-space-lg text-on-primary shadow-sm flex flex-col items-center text-center gap-1 mb-space-md">
-    ${icon('celebration','text-[32px]')}
-    <h3 class="font-headline-lg text-headline-lg font-bold">${esc(s.sequenceName)}</h3>
-    <p class="font-body-md text-body-md opacity-90">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</p>
-  </div>` : `<p class="font-label-sm text-label-sm text-on-surface-variant -mt-2 mb-space-md">${fmtFull(s.date)} • Logged by ${esc(roleName(s.performedBy))}</p>`}
-
   <div class="grid grid-cols-4 gap-2 mb-space-md">
     ${[['Exercises', stats.exercisesDone+'/'+stats.exercisesTotal],['Working sets', stats.workingSets],['Drop sets', stats.dropSets],['Total reps', stats.totalReps]].map(([label,val])=>`
       <div class="bg-surface-container-lowest rounded-xl p-2.5 shadow-sm flex flex-col items-center justify-center text-center">
@@ -2377,6 +2362,27 @@ function renderSessionDetail(sessionId, isSummary) {
   </div>` : ''}
 
   ${renderSessionTable(s)}
+  `;
+}
+function renderSessionDetail(sessionId, isSummary) {
+  const s = state.workoutSessions.find(w => w.id === sessionId);
+  if (!s) return `<p class="text-on-surface-variant pt-8">Session not found.</p>`;
+  const backHref = isSummary ? '#/home' : '#/history';
+  return `
+  <div class="flex items-center gap-2 pt-2 mb-space-md">
+    <a href="${backHref}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
+    <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">${isSummary?'Workout Complete':esc(s.sequenceName)}</h2>
+    ${!isSummary ? `<button data-action="open-delete-session" data-id="${s.id}" aria-label="Delete logged workout" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
+  </div>
+
+  ${isSummary ? `
+  <div class="bg-primary rounded-2xl p-space-lg text-on-primary shadow-sm flex flex-col items-center text-center gap-1 mb-space-md">
+    ${icon('celebration','text-[32px]')}
+    <h3 class="font-headline-lg text-headline-lg font-bold">${esc(s.sequenceName)}</h3>
+    <p class="font-body-md text-body-md opacity-90">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</p>
+  </div>` : `<p class="font-label-sm text-label-sm text-on-surface-variant -mt-2 mb-space-md">${fmtFull(s.date)} • Logged by ${esc(roleName(s.performedBy))}</p>`}
+
+  ${sessionDetailBody(s)}
 
   ${isSummary ? `<a href="#/home" class="block text-center mt-space-lg h-12 leading-[48px] rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg">Back to Home</a>` : ''}
   `;
@@ -2454,12 +2460,30 @@ function renderHistorySessions() {
 
 function renderHistoryExercisePicker() {
   if (!state.exercises.length) return `<p class="font-body-md text-body-md text-on-surface-variant">No exercises yet — add some from the Library.</p>`;
-  const selected = state.ui.historyFilterExercise && state.exercises.some(e=>e.id===state.ui.historyFilterExercise) ? state.ui.historyFilterExercise : state.exercises[0].id;
+  const cat = state.ui.historyExerciseCategory || 'all';
+  const list = state.exercises.filter(e => cat==='all' || e.category===cat);
+  const expandedId = state.ui.historyFilterExercise;
   return `
-  <select data-action-change="history-filter-ex" class="w-full h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40 mb-space-md">
-    ${state.exercises.map(e=>`<option value="${e.id}" ${selected===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
-  </select>
-  ${renderExerciseHistoryBody(selected)}
+  <div class="flex items-center gap-2 overflow-x-auto pb-1 mb-space-md -mx-margin px-margin">
+    ${['all',...CATEGORIES].map(c=>`<button data-action="history-filter-cat" data-cat="${c}" class="flex-shrink-0 h-9 px-3 rounded-full font-label-sm text-label-sm ${cat===c?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}" type="button">${c==='all'?'All':c}</button>`).join('')}
+  </div>
+  <div class="flex flex-col gap-space-sm">
+    ${list.length === 0 ? `<p class="font-body-md text-body-md text-on-surface-variant">No exercises in this category.</p>` :
+      list.map(e => {
+        const expanded = expandedId === e.id;
+        return `
+        <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+          <button data-action="history-toggle-exercise" data-id="${e.id}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
+            <div class="min-w-0">
+              <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(e.name)}</h4>
+              <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(e.category)}</span>
+            </div>
+            ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
+          </button>
+          ${expanded ? `<div class="px-4 pb-4">${renderExerciseHistoryBody(e.id)}</div>` : ''}
+        </div>`;
+      }).join('')}
+  </div>
   `;
 }
 
@@ -2904,6 +2928,14 @@ const actions = {
     state.scheduledSessions = state.scheduledSessions.filter(sc => sc.id !== ds.id);
     state.ui.modal = null; saveState(); rerender();
   },
+  'schedule-seq-change': (ds, el) => {
+    if (el.value !== '__new__') return;
+    const seq = { id: uid('seq'), name: 'New Sequence', description: '', archived: false, draft: true, createdAt: todayISO(), createdBy: state.role, exercises: [] };
+    state.sequences.push(seq);
+    state.ui.modal = null;
+    saveState();
+    navigate('#/sequences/' + seq.id);
+  },
   'schedule-confirm': () => {
     const date = state.ui.modal.date, sequenceId = $('#f-seq').value;
     state.scheduledSessions.push({ id: uid('sch'), sequenceId, date, plannedBy: state.role, status: 'planned', note: '' });
@@ -3158,7 +3190,7 @@ const actions = {
     if (!el) return;
     const cur = parseInt(el.value, 10) || 0;
     const next = Math.max(0, cur + Number(ds.dir));
-    el.value = next === 0 ? '' : String(next);
+    el.value = String(next);
   },
   'add-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.push(emptyPrescriptionDrop()); state.ui.seqDirty = true; saveState(); rerender(); },
   'remove-drop-preset': (ds) => { getSequence(ds.seqId).exercises[Number(ds.idx)].prescription.drops.splice(Number(ds.dropIdx), 1); state.ui.seqDirty = true; saveState(); rerender(); },
@@ -3173,6 +3205,8 @@ const actions = {
 
   'lib-filter-cat': (ds) => { state.ui.libCategory = ds.cat; rerender(); },
   'history-tab': (ds) => { state.ui.historyTab = ds.tab; rerender(); },
+  'history-filter-cat': (ds) => { state.ui.historyExerciseCategory = ds.cat; rerender(); },
+  'history-toggle-exercise': (ds) => { state.ui.historyFilterExercise = state.ui.historyFilterExercise === ds.id ? null : ds.id; rerender(); },
   'history-view-mode': (ds) => {
     const months = historyMonths();
     state.ui.historyFilterMonth = ds.mode === 'all' ? 'all' : (months[0] || 'all');
@@ -3322,11 +3356,7 @@ document.addEventListener('blur', (e) => {
 document.addEventListener('change', (e) => {
   const el = e.target;
   if (!el.matches) return;
-  if (el.matches('[data-action-change]')) {
-    const key = el.dataset.actionChange;
-    if (key === 'history-filter-ex') { state.ui.historyFilterExercise = el.value; saveState(); }
-    rerender();
-  } else if (el.matches('select[data-action]')) {
+  if (el.matches('select[data-action]')) {
     const fn = actions[el.dataset.action];
     if (fn) fn(el.dataset, el);
   }
