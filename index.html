@@ -3061,12 +3061,20 @@ document.addEventListener('input', (e) => {
    rerender() that's already replacing #root.innerHTML (the old input being
    detached triggers it) — calling rerender() again synchronously from inside
    that still-in-progress DOM swap corrupts it ("node no longer a child of
-   this node"). Running on the next tick lets that swap finish first. */
+   this node"). Running on the next tick lets that swap finish first — and
+   crucially, EVERY keystroke fires one of these rerender-induced blurs (not
+   just a real navigate-away), since restoreFocus() refocuses the same field
+   right after. Without checking whether focus actually left, a stale deferred
+   callback from an earlier keystroke can fire after a later keystroke has
+   already moved the value on to a new pending decimal, and wrongly stomp it
+   back to a rounded number mid-typing. */
 document.addEventListener('blur', (e) => {
   const el = e.target;
   if (!el.matches || !el.matches('[data-bind][data-type="number"]')) return;
   const bindPath = el.dataset.bind;
   setTimeout(() => {
+    const active = document.activeElement;
+    if (active && active.dataset && active.dataset.bind === bindPath) return;
     const current = getPath(state, bindPath);
     if (typeof current === 'string') {
       const n = current === '' || current === '.' || current === '-' ? null : Number(current);
