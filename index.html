@@ -62,6 +62,17 @@ input, textarea, [contenteditable]{ -webkit-user-select: text; user-select: text
 .pt-safe{ padding-top: env(safe-area-inset-top,0px); }
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
 input[type=number]{ -moz-appearance: textfield; }
+/* titles too long for their box bounce left/right instead of just truncating
+   with an ellipsis — only animated once JS (applyMarquees) confirms the text
+   actually overflows its container, via the .marquee-active class below */
+.marquee-wrap{ overflow:hidden; white-space:nowrap; }
+.marquee-wrap .marquee-text{ display:inline-block; }
+.marquee-wrap.marquee-active .marquee-text{ animation: marquee-bounce var(--marquee-duration, 6s) ease-in-out infinite; }
+@keyframes marquee-bounce{
+  0%, 10%{ transform: translateX(0); }
+  45%, 55%{ transform: translateX(var(--marquee-shift, 0px)); }
+  90%, 100%{ transform: translateX(0); }
+}
 </style>
 <script id="tw-config">
 tailwind.config = {
@@ -187,6 +198,12 @@ function monthLabel(key) { const [y,m] = key.split('-').map(Number); return `${M
 function fmtDuration(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec/60), s = sec%60; return `${m}:${String(s).padStart(2,'0')}`; }
 function fmtMinutes(sec) { return `${Math.round(sec/60)} min`; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* wraps a title in a marquee-capable container; applyMarquees() (called after
+   every render) measures whether it actually overflows and only then adds the
+   bounce animation — most titles fit and never animate */
+function marqueeHtml(text, extraClasses) {
+  return `<div class="marquee-wrap ${extraClasses||''}" data-marquee><span class="marquee-text">${esc(text)}</span></div>`;
+}
 function getPath(obj, path) { return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), obj); }
 function setPath(obj, path, value) { const keys = path.split('.'); let o = obj; for (let i=0;i<keys.length-1;i++) o = o[keys[i]]; o[keys[keys.length-1]] = value; }
 function $(sel, root=document){ return root.querySelector(sel); }
@@ -205,7 +222,7 @@ function freshUiState() {
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
-    seqDirty:false, seqDirtyFor:null, toast:null, expandedUpcomingId:null,
+    seqDirty:false, seqDirtyFor:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{},
     theme,
   };
 }
@@ -755,6 +772,23 @@ function render() {
       <button data-action="go" data-href="#/home" class="h-11 px-5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg" type="button">Back to Home</button>
     `);
   }
+  requestAnimationFrame(applyMarquees);
+}
+/* measures every marquee title post-render and only animates the ones that
+   actually overflow their box — most titles fit and stay static */
+function applyMarquees() {
+  document.querySelectorAll('[data-marquee]').forEach(wrap => {
+    const text = wrap.querySelector('.marquee-text');
+    if (!text) return;
+    const overflow = text.scrollWidth - wrap.clientWidth;
+    if (overflow > 4) {
+      wrap.classList.add('marquee-active');
+      wrap.style.setProperty('--marquee-shift', `-${overflow}px`);
+      wrap.style.setProperty('--marquee-duration', `${Math.max(3, overflow / 20)}s`);
+    } else {
+      wrap.classList.remove('marquee-active');
+    }
+  });
 }
 function renderInner() {
   applyTheme();
@@ -1123,7 +1157,11 @@ function modalNewExercise(m) {
         </div>
       </label>
       <label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">Default drop sets <span class="text-on-surface-variant/60">(optional)</span></span>
-        <input id="nf-drops" type="text" inputmode="numeric" placeholder="e.g. 0" class="h-12 px-3 rounded-lg bg-surface-container-low border border-outline-variant/40">
+        <div class="flex items-center gap-1">
+          <button data-action="step-input" data-target="nf-drops" data-dir="-1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('remove','text-[16px]')}</button>
+          <input id="nf-drops" type="text" inputmode="numeric" placeholder="e.g. 0" class="h-12 px-1 rounded-lg bg-surface-container-low border border-outline-variant/40 text-center min-w-0 flex-1">
+          <button data-action="step-input" data-target="nf-drops" data-dir="1" type="button" class="w-10 h-12 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center justify-center text-on-surface-variant flex-shrink-0">${icon('add','text-[16px]')}</button>
+        </div>
       </label>
     </div>
     <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">If left blank, this gets added to a sequence with 1 set and no drop sets — editable later as usual.</p>
@@ -1557,7 +1595,7 @@ function sequenceExerciseListRows(exercises) {
     <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-container-low">
       <span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm font-bold flex-shrink-0">${i+1}</span>
       <span class="font-label-md text-label-md text-on-surface truncate flex-1 min-w-0">${esc(ex.name)}</span>
-      <span class="font-label-sm text-label-sm text-on-surface-variant flex-shrink-0 text-right">${p.sets} × ${p.repLow}-${p.repHigh} reps${p.drops.length?`<span class="block text-tertiary">+${p.drops.length} drop${p.drops.length>1?'s':''}</span>`:''}</span>
+      <span class="font-label-sm text-label-sm text-on-surface-variant flex-shrink-0 text-right">${p.sets} sets${p.drops.length?`<span class="block text-tertiary">+${p.drops.length} drop${p.drops.length>1?'s':''}</span>`:''}</span>
     </div>`;
   }).join('');
 }
@@ -1568,7 +1606,7 @@ function dayDetailCard(s) {
   return `
   <div class="flex flex-col gap-2 border-t border-outline-variant/30 pt-3 mt-1 first:border-t-0 first:pt-0 first:mt-0">
     <div class="flex items-center justify-between gap-2">
-      <h4 class="font-headline-md text-headline-md text-on-surface min-w-0 truncate">${esc(seq.name)}</h4>
+      ${marqueeHtml(seq.name, 'font-headline-md text-headline-md text-on-surface min-w-0 flex-1')}
       <div class="flex items-center gap-1.5 flex-shrink-0">
         ${statusPill}
         <a href="#/sequences/${seq.id}" aria-label="Edit sequence" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">${icon('edit','text-[16px]')}</a>
@@ -1718,7 +1756,7 @@ function renderSequenceDetail(seqId) {
     <button data-action="cancel-inline-rename" aria-label="Cancel rename" class="w-9 h-9 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center flex-shrink-0" type="button">${icon('close','text-[18px]')}</button>
     ` : `
     <button data-action="start-inline-rename" data-id="${s.id}" class="flex items-center gap-1.5 text-left flex-1 min-w-0" type="button">
-      <h2 class="font-headline-lg text-headline-lg text-on-surface truncate">${esc(s.name)}</h2>
+      ${marqueeHtml(s.name, 'font-headline-lg text-headline-lg text-on-surface flex-1 min-w-0')}
       ${icon('edit','text-[16px] text-on-surface-variant flex-shrink-0')}
     </button>
     ${(isTrainer && !isDraft) ? `<button data-action="duplicate-sequence" data-id="${s.id}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant" type="button">${icon('content_copy','text-[18px]')}</button>` : ''}
@@ -1727,6 +1765,11 @@ function renderSequenceDetail(seqId) {
   </div>
   ${isRenaming && state.ui.inlineRenameError ? `<p class="font-label-sm text-label-sm text-error mb-1 pl-11 flex items-center gap-1">${icon('error','text-[14px]')}${esc(state.ui.inlineRenameError)}</p>` : ''}
   <p class="font-body-md text-body-md text-on-surface-variant mb-space-md">${esc(s.description||'')}</p>
+
+  ${s.exercises.length > 1 ? `
+  <div class="flex justify-end mb-2">
+    <button data-action="toggle-collapse-all-seq-ex" data-seq-id="${s.id}" class="h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon(s.exercises.every(sx=>state.ui.seqCollapsedIds[sx.id])?'unfold_more':'unfold_less','text-[16px]')}${s.exercises.every(sx=>state.ui.seqCollapsedIds[sx.id])?'Expand All':'Collapse All'}</button>
+  </div>` : ''}
 
   <div class="flex flex-col gap-space-sm" data-seq-rows="${s.id}">
     ${s.exercises.map((sx, i) => sequenceExerciseRow(s, sx, i, isTrainer)).join('')}
@@ -1770,18 +1813,21 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
   if (!ex) return '';
   const p = sx.prescription;
   const loggedDrops = lastLoggedDropsFor(ex.id);
+  const collapsed = !!state.ui.seqCollapsedIds[sx.id];
   return `
   <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden" data-drag-idx="${idx}">
     <div class="w-full p-3.5 flex items-center gap-2 text-left">
-      <div class="flex items-center gap-3 min-w-0 flex-1">
-        ${isTrainer ? `<span data-drag-handle data-seq-id="${seq.id}" data-idx="${idx}" style="touch-action:none" class="touch-none w-8 h-8 -ml-1 rounded-full flex items-center justify-center text-on-surface-variant cursor-grab active:cursor-grabbing flex-shrink-0">${icon('drag_indicator','text-[20px]')}</span>` : ''}
+      <button data-action="toggle-seq-ex" data-id="${sx.id}" class="flex items-center gap-3 min-w-0 flex-1 text-left" type="button">
         <span class="w-7 h-7 rounded-full bg-surface-container text-on-surface flex items-center justify-center font-label-md text-label-md font-bold flex-shrink-0">${idx+1}</span>
-        <div class="min-w-0">
-          <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(ex.name)}</h4>
+        <div class="min-w-0 flex-1">
+          ${marqueeHtml(ex.name, 'font-title-md text-title-md text-on-surface')}
           <p class="font-label-sm text-label-sm text-on-surface-variant">${p.sets} sets • ${ex.laterality==='unilateral'?'Unilateral':'Bilateral'}${p.drops.length?` • +${p.drops.length} drop${p.drops.length>1?'s':''}`:''}</p>
         </div>
-      </div>
+        ${icon(collapsed?'expand_more':'expand_less','text-[22px] text-on-surface-variant flex-shrink-0')}
+      </button>
+      ${isTrainer ? `<span data-drag-handle data-seq-id="${seq.id}" data-idx="${idx}" style="touch-action:none" class="touch-none w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant cursor-grab active:cursor-grabbing flex-shrink-0">${icon('drag_indicator','text-[20px]')}</span>` : ''}
     </div>
+    ${!collapsed ? `
     <div class="px-3.5 pb-3.5 flex flex-col gap-3 border-t border-outline-variant/30 pt-3">
       ${isTrainer ? `
       <div class="grid grid-cols-2 gap-2">
@@ -1826,7 +1872,7 @@ function sequenceExerciseRow(seq, sx, idx, isTrainer) {
       <div class="flex items-center justify-end pt-1">
         <button data-action="remove-exercise" data-seq-id="${seq.id}" data-idx="${idx}" class="h-9 px-3 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('delete','text-[16px]')}Remove</button>
       </div>` : ''}
-    </div>
+    </div>` : ''}
   </div>`;
 }
 function seqIdx(id) { return state.sequences.findIndex(s=>s.id===id); }
@@ -2339,13 +2385,23 @@ function renderSessionDetail(sessionId, isSummary) {
 /* ================= HISTORY ================= */
 function renderHistory() {
   const tab = state.ui.historyTab;
+  const months = historyMonths();
+  const filterMonth = (state.ui.historyFilterMonth === 'all' || months.includes(state.ui.historyFilterMonth)) ? state.ui.historyFilterMonth : 'all';
+  const viewMode = filterMonth === 'all' ? 'all' : 'month';
   return `
   <div class="flex items-center justify-between pt-2 mb-space-md">
     <h2 class="font-headline-lg text-headline-lg text-on-surface">History</h2>
   </div>
-  <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm mb-space-md w-fit">
-    <button data-action="history-tab" data-tab="sessions" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='sessions'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Sessions</button>
-    <button data-action="history-tab" data-tab="exercises" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='exercises'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Exercises</button>
+  <div class="flex items-center justify-between gap-2 mb-space-md flex-wrap">
+    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
+      <button data-action="history-tab" data-tab="sessions" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='sessions'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Sessions</button>
+      <button data-action="history-tab" data-tab="exercises" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${tab==='exercises'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">Exercises</button>
+    </div>
+    ${tab==='sessions' ? `
+    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm w-fit">
+      <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
+      <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
+    </div>` : ''}
   </div>
   ${tab==='sessions' ? renderHistorySessions() : renderHistoryExercisePicker()}
   `;
@@ -2363,12 +2419,6 @@ function renderHistorySessions() {
   const canPrev = filterMonth !== 'all' && idx < months.length - 1;
   const canNext = filterMonth !== 'all' && idx > 0;
   return `
-  <div class="flex items-center justify-center mb-space-sm">
-    <div class="bg-surface-container p-1 rounded-full flex items-center shadow-sm">
-      <button data-action="history-view-mode" data-mode="month" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='month'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">By Month</button>
-      <button data-action="history-view-mode" data-mode="all" class="px-4 py-1.5 rounded-full font-label-sm text-label-sm ${viewMode==='all'?'bg-surface-container-lowest text-on-surface shadow-sm':'text-on-surface-variant'}" type="button">View All</button>
-    </div>
-  </div>
   ${viewMode==='month' ? `
   <div class="flex items-center justify-center gap-3 mb-space-md">
     <button data-action="history-month-prev" ${canPrev?'':'disabled'} aria-label="Older month" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container disabled:opacity-30 disabled:pointer-events-none transition-colors" type="button">${icon('chevron_left','text-[20px]')}</button>
@@ -3010,6 +3060,20 @@ const actions = {
     state.ui.inlineRenameSeqId = null; state.ui.inlineRenameDraft = null; state.ui.inlineRenameError = null; saveState(); rerender();
   },
   'toggle-history-row': (ds) => { state.ui.expandedHistorySessionId = state.ui.expandedHistorySessionId === ds.id ? null : ds.id; rerender(); },
+  'toggle-seq-ex': (ds) => {
+    if (state.ui.seqCollapsedIds[ds.id]) delete state.ui.seqCollapsedIds[ds.id];
+    else state.ui.seqCollapsedIds[ds.id] = true;
+    rerender();
+  },
+  'toggle-collapse-all-seq-ex': (ds) => {
+    const seq = getSequence(ds.seqId);
+    const allCollapsed = seq.exercises.length > 0 && seq.exercises.every(sx => state.ui.seqCollapsedIds[sx.id]);
+    seq.exercises.forEach(sx => {
+      if (allCollapsed) delete state.ui.seqCollapsedIds[sx.id];
+      else state.ui.seqCollapsedIds[sx.id] = true;
+    });
+    rerender();
+  },
   'toggle-home-upcoming': (ds) => { state.ui.expandedUpcomingId = state.ui.expandedUpcomingId === ds.id ? null : ds.id; rerender(); },
   'open-add-exercise': (ds) => { state.ui.modal = { type: 'add-exercise-to-sequence', seqId: ds.seqId, q: '' }; rerender(); },
   'save-sequence-changes': () => { state.ui.seqDirty = false; showToast('Changes saved'); },
