@@ -1546,7 +1546,10 @@ function renderHomeClient() {
         </div>
         ${icon(momentumExpanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
       </button>
-      ${momentumExpanded ? `<div class="px-4 pb-4">${sessionDetailBody(recent)}</div>` : ''}
+      ${momentumExpanded ? `<div class="px-4 pb-4">
+        ${sessionDetailBody(recent)}
+        <a href="#/history/session/${recent.id}" class="inline-flex items-center gap-1 mt-3 font-label-sm text-label-sm text-primary font-semibold">View full session, edit or delete${icon('arrow_forward','text-[14px]')}</a>
+      </div>` : ''}
     </div>`;
   }
 
@@ -1708,7 +1711,10 @@ function expandableSessionRow(s, keyPrefix) {
       </div>
       ${icon(expanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
     </button>
-    ${expanded ? `<div class="px-4 pb-4">${sessionDetailBody(s)}</div>` : ''}
+    ${expanded ? `<div class="px-4 pb-4">
+      ${sessionDetailBody(s)}
+      <a href="#/history/session/${s.id}" class="inline-flex items-center gap-1 mt-3 font-label-sm text-label-sm text-primary font-semibold">View full session, edit or delete${icon('arrow_forward','text-[14px]')}</a>
+    </div>` : ''}
   </div>`;
 }
 
@@ -2784,7 +2790,10 @@ function renderHistorySessions() {
           </div>
           ${icon(expanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
         </button>
-        ${expanded ? `<div class="px-4 pb-4">${sessionDetailBody(s)}</div>` : ''}
+        ${expanded ? `<div class="px-4 pb-4">
+          ${sessionDetailBody(s)}
+          <a href="#/history/session/${s.id}" class="inline-flex items-center gap-1 mt-3 font-label-sm text-label-sm text-primary font-semibold">View full session, edit or delete${icon('arrow_forward','text-[14px]')}</a>
+        </div>` : ''}
       </div>`;
     }).join('') || `<p class="font-body-md text-body-md text-on-surface-variant">No sessions yet.</p>`}
   </div>`;
