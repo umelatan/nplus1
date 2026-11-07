@@ -1579,7 +1579,12 @@ function renderHomeTrainer() {
       <a href="#/sequences/${nextSeq.id}" aria-label="Edit sequence" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('edit','text-[18px]')}</a>
       <a href="#/calendar" class="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface">${icon('calendar_today','text-[20px]')}</a>
     </div>
-  </section>` : ''}
+  </section>` : `
+  <section class="mt-space-lg bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm flex flex-col items-center text-center gap-2">
+    ${icon('event_available','text-[28px] text-on-surface-variant')}
+    <p class="font-body-md text-body-md text-on-surface-variant">No workout scheduled yet for ${esc(client.name)}. Plan one from the calendar.</p>
+    <a href="#/calendar" class="font-label-lg text-label-lg text-primary font-bold">Open Calendar</a>
+  </section>`}
 
   <section class="flex flex-col gap-space-sm mt-space-lg">
     <div class="flex items-center justify-between px-1">
@@ -1611,7 +1616,7 @@ function expandableSessionRow(s, keyPrefix) {
   <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
     <button data-action="toggle-history-row" data-id="${key}" class="w-full text-left p-4 flex items-center justify-between gap-2" type="button">
       <div class="min-w-0">
-        <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)}</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant">${fmtShort(s.date)} • ${fmtMinutes(s.durationSeconds)} • Logged by ${esc(performedByDisplay(s))}</span>
         <h4 class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.sequenceName)}</h4>
       </div>
       ${icon(expanded?'expand_less':'expand_more','text-[20px] text-on-surface-variant flex-shrink-0')}
