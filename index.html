@@ -220,7 +220,7 @@ function freshUiState() {
     historyTab:'sessions', historyFilterMonth:'all', historyFilterExercise: null, historyMonthPickerOpen:false, historyExerciseCategory:'all', historyExpandedExerciseIds:{},
     libSearch:'', libCategory:'all', modal:null, expandedHistoryIds:{},
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
-    adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
+    adminWhitelist:null, adminTraineesByTrainer:null, adminCoachesByTrainee:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
     seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{}, workoutOverviewOpen:false,
     theme,
@@ -505,18 +505,20 @@ function currentUser() { return state.users[state.role]; }
 function otherUser() { return state.users[otherRole()]; }
 function roleName(r) { return state.users[r].name; }
 /* a sequence's createdBy only ever stored the creator's ROLE ('trainer'/'client'),
-   so resolving it live misattributes authorship the moment a trainee gets
-   reassigned to a different trainer. Newly created sequences also snapshot the
-   creator's actual name (createdByName); older ones fall back to role-lookup. */
-function createdByDisplay(seq) { return (seq && seq.createdByName) || (seq && roleName(seq.createdBy)) || ''; }
+   never WHO. Newly created sequences also snapshot the creator's actual name
+   (createdByName); a legacy record without one has no reliable live fallback
+   to resolve through once a trainee can have more than one coach — roleName
+   ('trainer') means "whichever coach is currently looking at this" (a trainer
+   always resolves to themselves, a trainee to whichever one coach she happens
+   to have been matched to), so it would misattribute old work to the WRONG
+   specific coach instead of leaving it honestly generic. 'client' has no such
+   ambiguity: a sequence only ever lives in one trainee's own data tree. */
+function createdByDisplay(seq) { return (seq && seq.createdByName) || (seq && seq.createdBy === 'client' && roleName('client')) || (seq ? 'Trainer' : ''); }
 /* same problem, same fix, for "Planned by" on a scheduled session: newly
-   scheduled sessions snapshot the planner's actual name (plannedByName).
-   A legacy record without one falls back to the sequence's own creator
-   (since scheduling it was very likely done by whoever designed it) rather
-   than resolving through the CURRENT trainer assignment, which can name a
-   completely different person than who actually scheduled it. 'client' is
-   safe to resolve live either way: a scheduled item only ever belongs to one
-   trainee's own data tree, so that mapping never actually changes. */
+   scheduled sessions snapshot the planner's actual name (plannedByName). A
+   legacy record without one falls back to the sequence's own creator (since
+   scheduling it was very likely done by whoever designed it), then to the
+   same generic 'Trainer' as createdByDisplay — never a live trainer lookup. */
 function plannedByDisplay(s) {
   if (s.plannedByName) return s.plannedByName;
   if (s.plannedBy === 'trainer') {
@@ -527,8 +529,9 @@ function plannedByDisplay(s) {
 }
 /* same problem, same fix, for "Logged by" on a completed workout session:
    newly logged sessions snapshot the logger's actual name (performedByName).
-   A legacy session without one falls back to the live role lookup. */
-function performedByDisplay(s) { return (s && s.performedByName) || (s && roleName(s.performedBy)) || ''; }
+   A legacy session without one falls back to the generic label, not a live
+   lookup (see createdByDisplay above for why). */
+function performedByDisplay(s) { return (s && s.performedByName) || (s && s.performedBy === 'client' && roleName('client')) || (s ? 'Trainer' : ''); }
 
 function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
@@ -1031,6 +1034,7 @@ function renderModal() {
   else if (m.type === 'admin-add-user') inner = modalAdminAddUser(m);
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
   else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
+  else if (m.type === 'admin-fix-attribution') inner = modalAdminFixAttribution(m);
   else if (m.type === 'edit-nickname') inner = modalEditNickname(m);
   return `
   <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
@@ -2916,8 +2920,23 @@ async function loadAdminCenterData() {
         });
       }
     }
+    /* reverse direction of traineesByTrainer — every coach currently assigned
+       to each trainee, so the admin can pick one when backfilling legacy
+       (pre-per-coach-attribution) records. See 'admin-fix-attribution-confirm'. */
+    const coachesByTrainee = {};
+    for (const w of wl) {
+      if (w.role === 'trainee' && w.uid) {
+        const idxSnap = await get(ref(db, `traineeIndex/${w.uid}`));
+        const trainerUids = Object.keys(idxSnap.val() || {});
+        coachesByTrainee[w.uid] = trainerUids.map(tUid => {
+          const entry = wl.find(x => x.uid === tUid);
+          return { uid: tUid, name: entry ? (entry.nickname || entry.email) : tUid };
+        });
+      }
+    }
     state.ui.adminWhitelist = wl;
     state.ui.adminTraineesByTrainer = traineesByTrainer;
+    state.ui.adminCoachesByTrainee = coachesByTrainee;
     state.ui.adminLoaded = true;
     state.ui.adminLoadError = null;
   } catch (e) {
@@ -2952,6 +2971,7 @@ function adminUserRow(w) {
   const signedIn = !!w.uid;
   const chipKey = w.uid || adminPendingKey(w.email);
   const trainees = w.role === 'trainer' ? ((state.ui.adminTraineesByTrainer||{})[chipKey] || []) : [];
+  const coaches = w.role === 'trainee' && w.uid ? ((state.ui.adminCoachesByTrainee||{})[w.uid] || []) : [];
   return `
   <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
     <div class="flex items-center justify-between gap-2">
@@ -2967,6 +2987,8 @@ function adminUserRow(w) {
     </div>
     ${trainees.length ? `<div class="flex flex-wrap gap-1.5">${trainees.map(t=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(t.name)}${signedIn?'':' (pending)'}</span>`).join('')}</div>` : ''}
     ${trainees.length && !signedIn ? `<p class="font-label-sm text-label-sm text-tertiary">Applies automatically once they sign in.</p>` : ''}
+    ${coaches.length ? `<div class="flex flex-wrap gap-1.5 items-center">${coaches.map(c=>`<span class="px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm">${esc(c.name)}</span>`).join('')}</div>` : ''}
+    ${coaches.length ? `<button data-action="open-admin-fix-attribution" data-trainee-uid="${w.uid}" data-trainee-name="${esc(w.nickname||w.email)}" class="self-start h-8 px-3 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1" type="button">${icon('history_edu','text-[15px]')}Fix legacy attribution</button>` : ''}
   </div>`;
 }
 function modalAdminAddUser(m) {
@@ -2998,6 +3020,20 @@ function modalAdminAssign(m) {
         </label>`).join('') : `<p class="font-body-md text-body-md text-on-surface-variant">No trainees have signed in yet — ask them to sign in once, then come back here.</p>`}
     </div>
   `, `<button data-action="admin-assign-confirm" data-trainer-uid="${m.trainerUid || ''}" data-trainer-email="${esc(m.trainerEmail)}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Assignments</button>`);
+}
+function modalAdminFixAttribution(m) {
+  const coaches = (state.ui.adminCoachesByTrainee||{})[m.traineeUid] || [];
+  return modalShell(`Fix legacy attribution for ${esc(m.traineeName)}`, `
+    <p class="font-body-md text-body-md text-on-surface-variant">Sequences, scheduled sessions, and workouts logged before per-coach attribution was tracked don't know which coach actually did the work. Pick who it really was — this only fills in records that don't already have a name on them, and never touches anything logged from here on.</p>
+    ${coaches.length ? `
+    <div class="flex flex-col gap-1.5">
+      ${coaches.map((c,i) => `
+        <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-surface-container-low">
+          <input type="radio" name="fix-attrib-coach" value="${c.uid}" ${i===0?'checked':''} class="w-5 h-5">
+          <span class="font-label-lg text-label-lg text-on-surface">${esc(c.name)}</span>
+        </label>`).join('')}
+    </div>` : ''}
+  `, coaches.length ? `<button data-action="admin-fix-attribution-confirm" data-trainee-uid="${m.traineeUid}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Apply</button>` : '');
 }
 function modalAdminRemoveUser(m) {
   return modalShell(`Remove ${esc(m.email)}?`, `
@@ -3127,6 +3163,34 @@ const actions = {
     await update(ref(db), updates);
     state.ui.modal = null; state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender();
     loadAdminCenterData();
+  },
+  'open-admin-fix-attribution': (ds) => { state.ui.modal = { type: 'admin-fix-attribution', traineeUid: ds.traineeUid, traineeName: ds.traineeName }; rerender(); },
+  'admin-fix-attribution-confirm': async (ds) => {
+    const traineeUid = ds.traineeUid;
+    const picked = $('input[name="fix-attrib-coach"]:checked');
+    if (!picked) return;
+    const coaches = (state.ui.adminCoachesByTrainee||{})[traineeUid] || [];
+    const coach = coaches.find(c => c.uid === picked.value);
+    const coachName = coach ? coach.name : 'Trainer';
+    const [seqSnap, schSnap, wsSnap] = await Promise.all([
+      get(ref(db, `userData/${traineeUid}/sequences`)),
+      get(ref(db, `userData/${traineeUid}/scheduledSessions`)),
+      get(ref(db, `userData/${traineeUid}/workoutSessions`)),
+    ]);
+    const updates = {};
+    let count = 0;
+    Object.entries(seqSnap.val() || {}).forEach(([id, seq]) => {
+      if (seq.createdBy === 'trainer' && !seq.createdByName) { updates[`userData/${traineeUid}/sequences/${id}/createdByName`] = coachName; count++; }
+    });
+    Object.entries(schSnap.val() || {}).forEach(([id, sc]) => {
+      if (sc.plannedBy === 'trainer' && !sc.plannedByName) { updates[`userData/${traineeUid}/scheduledSessions/${id}/plannedByName`] = coachName; count++; }
+    });
+    Object.entries(wsSnap.val() || {}).forEach(([id, ws]) => {
+      if (ws.performedBy === 'trainer' && !ws.performedByName) { updates[`userData/${traineeUid}/workoutSessions/${id}/performedByName`] = coachName; count++; }
+    });
+    if (count) await update(ref(db), updates);
+    state.ui.modal = null; rerender();
+    showToast(count ? `Updated ${count} legacy record${count===1?'':'s'} to "${coachName}"` : 'Nothing to update — every record already has a name attached');
   },
   'retry-admin-load': () => { state.ui.adminLoadError = null; rerender(); loadAdminCenterData(); },
   'refresh-admin': () => { state.ui.adminLoaded = false; state.ui.adminLoadError = null; rerender(); loadAdminCenterData(); },
