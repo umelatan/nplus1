@@ -222,7 +222,7 @@ function freshUiState() {
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
-    seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{},
+    seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{}, workoutOverviewOpen:false,
     theme,
   };
 }
@@ -1028,7 +1028,6 @@ function renderModal() {
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
   else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
   else if (m.type === 'edit-nickname') inner = modalEditNickname(m);
-  else if (m.type === 'workout-overview') inner = modalWorkoutOverview(m);
   return `
   <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
     <div class="absolute inset-0 bg-on-background/40" data-action="close-modal"></div>
@@ -1117,8 +1116,16 @@ function modalEditSessionDate(m) {
     </div>
   `, `<button data-action="edit-session-date-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Date</button>`);
 }
-function modalWorkoutOverview(m) {
+/* a left-edge off-canvas drawer (not the shared centered/bottom-sheet modal
+   system — triggered by the active session's hamburger icon, so it reads as
+   "slide out the menu" rather than "a dialog popped up") showing the whole
+   workout's exercise order with per-exercise progress; always rendered (open
+   or not) so the backdrop/panel can be toggled with a class instead of being
+   mounted and unmounted. */
+function renderWorkoutOverviewDrawer() {
   const s = state.activeSession;
+  if (!s) return '';
+  const open = !!state.ui.workoutOverviewOpen;
   const rows = s.exercises.map((ex, i) => {
     const { done, total } = sessionExerciseProgress(ex);
     const complete = total > 0 && done === total;
@@ -1141,10 +1148,18 @@ function modalWorkoutOverview(m) {
       </div>
     </div>`;
   }).join('');
-  return modalShell('Workout Plan', `
-    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">Tap an exercise to jump to it, or drag the handle to reorder.</p>
-    <div class="flex flex-col gap-space-sm" data-session-rows="true">${rows}</div>
-  `, '');
+  return `
+  <div class="fixed inset-0 z-[90] bg-on-background/40 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}" data-action="close-workout-overview"></div>
+  <div class="fixed top-0 bottom-0 left-0 z-[95] w-[82%] max-w-xs bg-surface-container-lowest shadow-xl overflow-y-auto pt-safe pb-safe transition-transform duration-200 ease-out ${open ? 'translate-x-0' : '-translate-x-full'}">
+    <div class="p-space-lg flex flex-col gap-space-md">
+      <div class="flex items-center justify-between">
+        <h3 class="font-headline-md text-headline-md text-on-surface">Workout Plan</h3>
+        <button aria-label="Close" data-action="close-workout-overview" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface-variant" type="button">${icon('close','text-[20px]')}</button>
+      </div>
+      <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">Tap an exercise to jump to it, or drag the handle to reorder.</p>
+      <div class="flex flex-col gap-space-sm" data-session-rows="true">${rows}</div>
+    </div>
+  </div>`;
 }
 function modalEditSessionExercise(m) {
   const ex = state.activeSession.exercises[m.exIdx];
@@ -2183,6 +2198,7 @@ function renderActiveWorkout() {
   </div>
   ${s.exercises.map((ex, i) => renderWorkoutExercise(ex, i, s)).join('')}
   <button data-action="open-add-exercise-session" class="w-full h-12 mt-4 rounded-full bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('add','text-[20px] text-primary')}Add Exercise</button>
+  ${renderWorkoutOverviewDrawer()}
   `;
 }
 
@@ -3188,7 +3204,8 @@ const actions = {
     state.activeSession.date = state.ui.modal.date;
     state.ui.modal = null; saveState(); rerender();
   },
-  'open-workout-overview': () => { state.ui.modal = { type: 'workout-overview' }; rerender(); },
+  'open-workout-overview': () => { state.ui.workoutOverviewOpen = true; rerender(); },
+  'close-workout-overview': () => { state.ui.workoutOverviewOpen = false; rerender(); },
   'reorder-session-exercise': (ds) => {
     const from = Number(ds.fromIdx), to = Number(ds.toIdx);
     const exs = state.activeSession.exercises;
@@ -3198,7 +3215,7 @@ const actions = {
     saveState(); rerender();
   },
   'jump-to-session-exercise': (ds) => {
-    state.ui.modal = null;
+    state.ui.workoutOverviewOpen = false;
     rerender();
     /* setTimeout, not requestAnimationFrame — rAF doesn't reliably fire for a
        backgrounded/automation-driven tab, while a macrotask does regardless */
