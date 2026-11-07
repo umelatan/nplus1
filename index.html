@@ -1838,7 +1838,7 @@ function sequenceCard(s, isTrainer) {
             <h4 ${isTrainer ? `data-action="start-inline-rename" data-id="${s.id}"` : ''} class="font-title-md text-title-md text-on-surface font-semibold truncate">${esc(s.name)}</h4>
             ${isDraft ? pill('Draft', 'bg-tertiary-fixed text-on-tertiary-fixed-variant font-bold') : ''}
           </div>
-          <p class="font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises${lastUsed?` • Last used ${fmtShort(lastUsed.date)}`:''}${s.createdBy?` • By ${esc(createdByDisplay(s))}`:''}</p>
+          <p class="font-label-sm text-label-sm text-on-surface-variant">${s.exercises.length} exercises${lastUsed?` • Last used ${fmtShort(lastUsed.date)}`:''}</p>
         </button>`}
       </div>
       <button data-action="go" data-href="#/sequences/${s.id}" class="w-9 h-9 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant flex-shrink-0" type="button">${icon('chevron_right','text-[18px]')}</button>
