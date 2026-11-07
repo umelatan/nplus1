@@ -3024,7 +3024,7 @@ function modalAdminAssign(m) {
 function modalAdminFixAttribution(m) {
   const coaches = (state.ui.adminCoachesByTrainee||{})[m.traineeUid] || [];
   return modalShell(`Fix legacy attribution for ${esc(m.traineeName)}`, `
-    <p class="font-body-md text-body-md text-on-surface-variant">Sequences, scheduled sessions, and workouts logged before per-coach attribution was tracked don't know which coach actually did the work. Pick who it really was — this only fills in records that don't already have a name on them, and never touches anything logged from here on.</p>
+    <p class="font-body-md text-body-md text-on-surface-variant">Sequences, scheduled sessions, and workouts logged before per-account attribution was tracked don't know which coach actually did the work. Pick who it really was — anything ${esc(m.traineeName)} logged herself gets her own name automatically, no need to pick that. This only fills in records that don't already have a name on them, and never touches anything logged from here on.</p>
     ${coaches.length ? `
     <div class="flex flex-col gap-1.5">
       ${coaches.map((c,i) => `
@@ -3172,6 +3172,11 @@ const actions = {
     const coaches = (state.ui.adminCoachesByTrainee||{})[traineeUid] || [];
     const coach = coaches.find(c => c.uid === picked.value);
     const coachName = coach ? coach.name : 'Trainer';
+    /* the trainee herself has no such ambiguity — a data tree only ever belongs
+       to one trainee, so her own self-logged records can be safely backfilled
+       with her own name too, no picker needed. */
+    const traineeWl = (state.ui.adminWhitelist||[]).find(w => w.uid === traineeUid);
+    const traineeName = traineeWl ? (traineeWl.nickname || traineeWl.email) : 'Trainee';
     const [seqSnap, schSnap, wsSnap] = await Promise.all([
       get(ref(db, `userData/${traineeUid}/sequences`)),
       get(ref(db, `userData/${traineeUid}/scheduledSessions`)),
@@ -3181,12 +3186,15 @@ const actions = {
     let count = 0;
     Object.entries(seqSnap.val() || {}).forEach(([id, seq]) => {
       if (seq.createdBy === 'trainer' && !seq.createdByName) { updates[`userData/${traineeUid}/sequences/${id}/createdByName`] = coachName; count++; }
+      else if (seq.createdBy === 'client' && !seq.createdByName) { updates[`userData/${traineeUid}/sequences/${id}/createdByName`] = traineeName; count++; }
     });
     Object.entries(schSnap.val() || {}).forEach(([id, sc]) => {
       if (sc.plannedBy === 'trainer' && !sc.plannedByName) { updates[`userData/${traineeUid}/scheduledSessions/${id}/plannedByName`] = coachName; count++; }
+      else if (sc.plannedBy === 'client' && !sc.plannedByName) { updates[`userData/${traineeUid}/scheduledSessions/${id}/plannedByName`] = traineeName; count++; }
     });
     Object.entries(wsSnap.val() || {}).forEach(([id, ws]) => {
       if (ws.performedBy === 'trainer' && !ws.performedByName) { updates[`userData/${traineeUid}/workoutSessions/${id}/performedByName`] = coachName; count++; }
+      else if (ws.performedBy === 'client' && !ws.performedByName) { updates[`userData/${traineeUid}/workoutSessions/${id}/performedByName`] = traineeName; count++; }
     });
     if (count) await update(ref(db), updates);
     state.ui.modal = null; rerender();
