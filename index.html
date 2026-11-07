@@ -677,6 +677,13 @@ function session_flatSets(ex) {
   for (const s of ex.sets) { out.push({set:s, isDrop:false}); for (const d of (s.drops||[])) out.push({set:d, isDrop:true}); }
   return out;
 }
+/* per-exercise logging progress within an in-progress session, for the
+   overview drawer's done/in-progress/not-started status per row */
+function sessionExerciseProgress(ex) {
+  const flat = session_flatSets(ex);
+  const done = flat.filter(({set}) => hasSetData(set)).length;
+  return { done, total: flat.length };
+}
 
 /* ---------- icons ---------- */
 function icon(name, cls='text-[20px]') { return `<span class="material-symbols-outlined ${cls}">${name}</span>`; }
@@ -1021,6 +1028,7 @@ function renderModal() {
   else if (m.type === 'admin-assign') inner = modalAdminAssign(m);
   else if (m.type === 'admin-remove-user') inner = modalAdminRemoveUser(m);
   else if (m.type === 'edit-nickname') inner = modalEditNickname(m);
+  else if (m.type === 'workout-overview') inner = modalWorkoutOverview(m);
   return `
   <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
     <div class="absolute inset-0 bg-on-background/40" data-action="close-modal"></div>
@@ -1108,6 +1116,35 @@ function modalEditSessionDate(m) {
       ${miniDatePicker(m)}
     </div>
   `, `<button data-action="edit-session-date-confirm" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Save Date</button>`);
+}
+function modalWorkoutOverview(m) {
+  const s = state.activeSession;
+  const rows = s.exercises.map((ex, i) => {
+    const { done, total } = sessionExerciseProgress(ex);
+    const complete = total > 0 && done === total;
+    const started = done > 0;
+    const statusIcon = complete ? icon('check_circle','text-[22px] text-primary')
+      : started ? icon('incomplete_circle','text-[22px] text-tertiary')
+      : icon('radio_button_unchecked','text-[22px] text-on-surface-variant');
+    const statusLabel = complete ? 'Completed' : `${done}/${total} sets logged`;
+    return `
+    <div class="bg-surface-container rounded-xl shadow-sm overflow-hidden" data-drag-idx="${i}">
+      <div class="w-full p-3 flex items-center gap-2">
+        <button data-action="jump-to-session-exercise" data-ex-idx="${i}" class="flex items-center gap-3 min-w-0 flex-1 text-left" type="button">
+          <span class="flex-shrink-0">${statusIcon}</span>
+          <div class="min-w-0 flex-1">
+            <h4 class="font-title-md text-title-md text-on-surface truncate">${esc(ex.nameSnapshot)}</h4>
+            <p class="font-label-sm text-label-sm text-on-surface-variant">${statusLabel}</p>
+          </div>
+        </button>
+        <span data-drag-handle data-drag-scope="session" data-idx="${i}" style="touch-action:none" class="touch-none w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant cursor-grab active:cursor-grabbing flex-shrink-0">${icon('drag_indicator','text-[20px]')}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return modalShell('Workout Plan', `
+    <p class="font-label-sm text-label-sm text-on-surface-variant -mt-1">Tap an exercise to jump to it, or drag the handle to reorder.</p>
+    <div class="flex flex-col gap-space-sm" data-session-rows="true">${rows}</div>
+  `, '');
 }
 function modalEditSessionExercise(m) {
   const ex = state.activeSession.exercises[m.exIdx];
@@ -2126,13 +2163,16 @@ function renderActiveWorkout() {
   return `
   <div class="sticky top-0 z-30 -mx-margin px-margin py-3 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <div class="flex items-center justify-between gap-space-sm">
-      <div class="min-w-0">
-        <div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-semibold">Active Session</span></div>
-        <h2 class="font-headline-md text-headline-md text-on-surface truncate">${esc(s.sequenceName)}</h2>
-        <p class="font-label-sm text-label-sm text-on-surface-variant">
-          <button data-action="open-edit-session-date" class="underline decoration-dotted text-on-surface-variant" type="button">${fmtShort(s.date)}</button>
-          • ${s.exercises.length} exercises • Logged by ${esc(roleName(s.performedBy))}
-        </p>
+      <div class="flex items-center gap-2 min-w-0">
+        <button data-action="open-workout-overview" aria-label="View overall plan" class="min-h-[44px] min-w-[44px] w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-full transition-colors flex-shrink-0" type="button">${icon('menu','text-[22px]')}</button>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-semibold">Active Session</span></div>
+          <h2 class="font-headline-md text-headline-md text-on-surface truncate">${esc(s.sequenceName)}</h2>
+          <p class="font-label-sm text-label-sm text-on-surface-variant">
+            <button data-action="open-edit-session-date" class="underline decoration-dotted text-on-surface-variant" type="button">${fmtShort(s.date)}</button>
+            • ${s.exercises.length} exercises • Logged by ${esc(roleName(s.performedBy))}
+          </p>
+        </div>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
         <button data-action="open-cancel-session" aria-label="Cancel session" class="min-h-[48px] min-w-[48px] w-12 h-12 flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container rounded-full transition-colors" type="button">${icon('close','text-[20px]')}</button>
@@ -2150,7 +2190,7 @@ function renderWorkoutExercise(ex, exIdx, session) {
   const prevFind = findPreviousExerciseBlock(ex.exerciseId, null);
   const prevBlock = prevFind ? prevFind.block : null;
   return `
-  <section class="mt-4 bg-surface-container-lowest rounded-xl p-4 shadow-sm">
+  <section id="session-ex-${exIdx}" class="mt-4 bg-surface-container-lowest rounded-xl p-4 shadow-sm scroll-mt-20">
     <div class="flex items-start justify-between gap-2 mb-3">
       <div class="min-w-0">
         <div class="flex items-center gap-2">
@@ -3148,6 +3188,25 @@ const actions = {
     state.activeSession.date = state.ui.modal.date;
     state.ui.modal = null; saveState(); rerender();
   },
+  'open-workout-overview': () => { state.ui.modal = { type: 'workout-overview' }; rerender(); },
+  'reorder-session-exercise': (ds) => {
+    const from = Number(ds.fromIdx), to = Number(ds.toIdx);
+    const exs = state.activeSession.exercises;
+    if (from === to || from < 0 || to < 0 || from >= exs.length || to >= exs.length) return;
+    const [item] = exs.splice(from, 1);
+    exs.splice(to, 0, item);
+    saveState(); rerender();
+  },
+  'jump-to-session-exercise': (ds) => {
+    state.ui.modal = null;
+    rerender();
+    /* setTimeout, not requestAnimationFrame — rAF doesn't reliably fire for a
+       backgrounded/automation-driven tab, while a macrotask does regardless */
+    setTimeout(() => {
+      const el = document.getElementById('session-ex-' + ds.exIdx);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  },
   'swap-sequence-confirm': (ds) => { const sc = state.scheduledSessions.find(x => x.id === ds.id); sc.sequenceId = $('#f-seq').value; state.ui.modal = null; saveState(); rerender(); },
 
   'open-start-picker': () => { state.ui.modal = { type: 'start-workout-pick' }; rerender(); },
@@ -3613,23 +3672,30 @@ document.addEventListener('change', (e) => {
   }
 });
 
-/* ---- sequence exercise reordering (pointer-based: works for touch + mouse) ----
-   Only the dragged row is transformed during the gesture; every other row's
-   bounding rect, captured once at pointerdown, never changes (CSS transforms
-   don't trigger reflow) so comparing the dragged row's live center against
-   those cached midpoints stays accurate without re-querying the DOM. */
-let seqDragCtx = null;
+/* ---- drag-to-reorder (pointer-based: works for touch + mouse) ----
+   Shared by two row lists: a sequence's own exercises (data-seq-rows, scope
+   'seq', the default when a handle doesn't say otherwise) and the active
+   workout overview drawer's exercise list (data-session-rows, scope
+   'session'). Only the dragged row is transformed during the gesture; every
+   other row's bounding rect, captured once at pointerdown, never changes
+   (CSS transforms don't trigger reflow) so comparing the dragged row's live
+   center against those cached midpoints stays accurate without re-querying
+   the DOM. */
+let rowDragCtx = null;
 document.addEventListener('pointerdown', (e) => {
   const handle = e.target.closest('[data-drag-handle]');
   if (!handle) return;
+  const scope = handle.dataset.dragScope || 'seq';
   const seqId = handle.dataset.seqId;
+  const rows = scope === 'session'
+    ? Array.from(document.querySelectorAll(`[data-session-rows] > [data-drag-idx]`))
+    : Array.from(document.querySelectorAll(`[data-seq-rows="${seqId}"] > [data-drag-idx]`));
   const fromIdx = Number(handle.dataset.idx);
-  const rows = Array.from(document.querySelectorAll(`[data-seq-rows="${seqId}"] > [data-drag-idx]`));
   const row = rows[fromIdx];
   if (!row) return;
   e.preventDefault();
-  seqDragCtx = {
-    seqId, fromIdx, curIdx: fromIdx, startY: e.clientY, rows,
+  rowDragCtx = {
+    scope, seqId, fromIdx, curIdx: fromIdx, startY: e.clientY, rows,
     tops: rows.map(r => r.getBoundingClientRect().top),
     heights: rows.map(r => r.offsetHeight),
   };
@@ -3638,13 +3704,13 @@ document.addEventListener('pointerdown', (e) => {
   row.classList.add('shadow-lg');
 });
 document.addEventListener('pointermove', (e) => {
-  if (!seqDragCtx) return;
+  if (!rowDragCtx) return;
   e.preventDefault();
-  const { rows, tops, heights, fromIdx } = seqDragCtx;
-  const dy = e.clientY - seqDragCtx.startY;
+  const { rows, tops, heights, fromIdx } = rowDragCtx;
+  const dy = e.clientY - rowDragCtx.startY;
   rows[fromIdx].style.transform = `translateY(${dy}px)`;
   const draggedCenter = tops[fromIdx] + heights[fromIdx] / 2 + dy;
-  let newIdx = seqDragCtx.curIdx;
+  let newIdx = rowDragCtx.curIdx;
   if (dy > 0) {
     for (let i = fromIdx + 1; i < rows.length; i++) {
       if (draggedCenter > tops[i] + heights[i] / 2) newIdx = i; else break;
@@ -3656,8 +3722,8 @@ document.addEventListener('pointermove', (e) => {
   } else {
     newIdx = fromIdx;
   }
-  if (newIdx !== seqDragCtx.curIdx) {
-    seqDragCtx.curIdx = newIdx;
+  if (newIdx !== rowDragCtx.curIdx) {
+    rowDragCtx.curIdx = newIdx;
     rows.forEach((r, i) => {
       if (i === fromIdx) return;
       let shift = 0;
@@ -3669,16 +3735,19 @@ document.addEventListener('pointermove', (e) => {
   }
 }, { passive: false });
 document.addEventListener('pointerup', () => {
-  if (!seqDragCtx) return;
-  const { seqId, fromIdx, curIdx, rows } = seqDragCtx;
+  if (!rowDragCtx) return;
+  const { scope, seqId, fromIdx, curIdx, rows } = rowDragCtx;
   rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; r.style.position = ''; r.style.zIndex = ''; r.classList.remove('shadow-lg'); });
-  seqDragCtx = null;
-  if (curIdx !== fromIdx) actions['reorder-exercise']({ seqId, fromIdx: String(fromIdx), toIdx: String(curIdx) });
+  rowDragCtx = null;
+  if (curIdx !== fromIdx) {
+    if (scope === 'session') actions['reorder-session-exercise']({ fromIdx: String(fromIdx), toIdx: String(curIdx) });
+    else actions['reorder-exercise']({ seqId, fromIdx: String(fromIdx), toIdx: String(curIdx) });
+  }
 });
 document.addEventListener('pointercancel', () => {
-  if (!seqDragCtx) return;
-  seqDragCtx.rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; r.style.position = ''; r.style.zIndex = ''; r.classList.remove('shadow-lg'); });
-  seqDragCtx = null;
+  if (!rowDragCtx) return;
+  rowDragCtx.rows.forEach(r => { r.style.transform = ''; r.style.transition = ''; r.style.position = ''; r.style.zIndex = ''; r.classList.remove('shadow-lg'); });
+  rowDragCtx = null;
 });
 
 /* ================= TICKERS ================= */
