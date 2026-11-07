@@ -206,6 +206,12 @@ function marqueeHtml(text, extraClasses) {
 }
 function getPath(obj, path) { return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), obj); }
 function setPath(obj, path, value) { const keys = path.split('.'); let o = obj; for (let i=0;i<keys.length-1;i++) o = o[keys[i]]; o[keys[keys.length-1]] = value; }
+/* set-editing actions (add/remove set or drop, cycle working/warmup) carry a
+   data-root — "activeSession" for the live workout screen, or
+   "workoutSessions.<idx>" when editing an already-logged one (see
+   renderEditableLoggedSession) — resolved the same way stepperField/
+   intensityPillGroup's data-bind paths already are. */
+function rootSession(ds) { return getPath(state, ds.root || 'activeSession'); }
 function $(sel, root=document){ return root.querySelector(sel); }
 function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
@@ -222,7 +228,7 @@ function freshUiState() {
     inlineRenameSeqId:null, inlineRenameDraft:null, inlineRenameError:null, profileMenuOpen:false, addMenuOpen:false,
     adminWhitelist:null, adminTraineesByTrainer:null, adminCoachesByTrainee:null, adminLoaded:false, adminLoadError:null,
     nicknameDefault:null, editNicknameError:null,
-    seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{}, workoutOverviewOpen:false,
+    seqDirtyFor:null, seqSnapshot:null, toast:null, expandedUpcomingId:null, seqCollapsedIds:{}, workoutOverviewOpen:false, editingSessionId:null,
     theme,
   };
 }
@@ -2428,14 +2434,14 @@ function intensityPillGroup(basePath, obj, opts={}) {
   </div>`;
 }
 
-function renderEditableWorkingSet(exIdx, setIdx, set, ex) {
-  const base = `activeSession.exercises.${exIdx}.sets.${setIdx}`;
+function renderEditableWorkingSet(exIdx, setIdx, set, ex, root='activeSession') {
+  const base = `${root}.exercises.${exIdx}.sets.${setIdx}`;
   const label = set.type === 'warmup' ? 'WARM' : 'WORK';
   const bg = hasSetData(set) ? 'bg-primary-fixed/20' : 'bg-surface-container-low';
   const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
   const body = ex.laterality === 'unilateral' ? `
     <div class="${bg} rounded-xl p-3 mb-3 transition-all">
-      <button data-action="set-cycle-type" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="flex items-center gap-2 mb-2" type="button">
+      <button data-action="set-cycle-type" data-root="${root}" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="flex items-center gap-2 mb-2" type="button">
         <span class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-title-md text-title-md font-bold">${setIdx+1}</span>
         <span class="font-label-md text-label-md font-bold text-on-surface">${label} Set</span>
       </button>
@@ -2456,7 +2462,7 @@ function renderEditableWorkingSet(exIdx, setIdx, set, ex) {
     </div>` : `
     <div class="${bg} rounded-xl p-2.5 mb-2.5 transition-all">
       <div class="flex items-center gap-2">
-        <button data-action="set-cycle-type" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="w-10 flex-shrink-0 flex flex-col items-center justify-center" type="button">
+        <button data-action="set-cycle-type" data-root="${root}" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" class="w-10 flex-shrink-0 flex flex-col items-center justify-center" type="button">
           <span class="w-8 h-8 rounded-full bg-surface-container text-on-surface flex items-center justify-center font-title-md text-title-md font-bold">${setIdx+1}</span>
           <span class="font-label-sm text-[10px] text-on-surface-variant font-semibold mt-0.5">${label}</span>
         </button>
@@ -2465,19 +2471,19 @@ function renderEditableWorkingSet(exIdx, setIdx, set, ex) {
       </div>
       ${intensityPillGroup(base, set)}
       <div class="mt-2 flex items-center justify-end">
-        <button data-action="remove-set" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" aria-label="Remove set" class="h-9 px-3 rounded-full flex items-center gap-1 text-on-surface-variant hover:bg-surface-container-lowest flex-shrink-0" type="button">${icon('close','text-[16px]')}<span class="font-label-sm text-label-sm">Remove set</span></button>
+        <button data-action="remove-set" data-root="${root}" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" aria-label="Remove set" class="h-9 px-3 rounded-full flex items-center gap-1 text-on-surface-variant hover:bg-surface-container-lowest flex-shrink-0" type="button">${icon('close','text-[16px]')}<span class="font-label-sm text-label-sm">Remove set</span></button>
       </div>
     </div>`;
   const drops = (set.drops||[]).length ? `
     <div class="relative pl-6 ml-4 my-2 flex flex-col gap-2">
       <div class="absolute left-1 top-0 bottom-4 w-1 bg-tertiary-fixed rounded-full"></div>
-      ${set.drops.map((d, di) => renderEditableDrop(exIdx, setIdx, di, d, ex)).join('')}
+      ${set.drops.map((d, di) => renderEditableDrop(exIdx, setIdx, di, d, ex, root)).join('')}
     </div>` : '';
   return body + drops;
 }
 
-function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex) {
-  const base = `activeSession.exercises.${exIdx}.sets.${setIdx}.drops.${dropIdx}`;
+function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex, root='activeSession') {
+  const base = `${root}.exercises.${exIdx}.sets.${setIdx}.drops.${dropIdx}`;
   const unit = ex.loadType === 'per_side' ? 'kg/side' : 'kg';
   const isUni = ex.laterality === 'unilateral';
   return `
@@ -2485,7 +2491,7 @@ function renderEditableDrop(exIdx, setIdx, dropIdx, drop, ex) {
     <span class="absolute -left-5 top-4 font-bold text-tertiary text-[18px]">↳</span>
     <div class="flex items-center justify-between mb-1.5">
       <span class="px-2 py-0.5 bg-tertiary text-on-tertiary font-label-sm text-label-sm rounded-full font-extrabold uppercase">DROP ${dropIdx+1}</span>
-      <button data-action="remove-drop" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" data-drop-idx="${dropIdx}" class="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant" type="button">${icon('close','text-[14px]')}</button>
+      <button data-action="remove-drop" data-root="${root}" data-ex-idx="${exIdx}" data-set-idx="${setIdx}" data-drop-idx="${dropIdx}" class="w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant" type="button">${icon('close','text-[14px]')}</button>
     </div>
     ${isUni ? `
     <div class="grid grid-cols-2 gap-2">
@@ -2619,8 +2625,29 @@ function sessionDetailBody(s) {
     <button data-action="mark-reviewed" data-id="${s.id}" class="w-full h-11 rounded-full bg-primary text-on-primary font-label-lg text-label-lg">Mark Reviewed</button>
   </div>` : ''}
 
-  ${renderSessionTable(s)}
+  ${state.ui.editingSessionId === s.id ? renderEditableLoggedSession(s) : renderSessionTable(s)}
   `;
+}
+/* lets a logged (already-finished) session's numbers be corrected after the
+   fact — reuses the exact same stepper/RPE-pill editing rows the active
+   workout uses, just rooted at workoutSessions.<idx> instead of
+   activeSession (see renderEditableWorkingSet/renderEditableDrop and
+   rootSession). Deliberately narrower than the live editor: no reordering,
+   swapping, or tracking/load-type changes — just fixing the recorded sets. */
+function renderEditableLoggedSession(s) {
+  const wsIdx = state.workoutSessions.findIndex(w => w.id === s.id);
+  if (wsIdx === -1) return '';
+  const root = `workoutSessions.${wsIdx}`;
+  return s.exercises.map((ex, exIdx) => `
+    <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-space-sm">
+      <h4 class="font-title-md text-title-md text-on-surface font-semibold mb-3">${esc(ex.nameSnapshot)}</h4>
+      ${ex.sets.map((set, setIdx) => renderEditableWorkingSet(exIdx, setIdx, set, ex, root)).join('')}
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
+        <button data-action="add-set" data-root="${root}" data-ex-idx="${exIdx}" class="flex-1 min-h-[44px] px-4 bg-surface-container text-on-surface font-label-lg text-label-lg rounded-full flex items-center justify-center gap-1.5" type="button">${icon('add','text-[20px] text-primary')}Add Set</button>
+        <button data-action="add-drop" data-root="${root}" data-ex-idx="${exIdx}" class="flex-1 min-h-[44px] px-4 bg-tertiary-fixed text-on-tertiary-fixed font-label-lg text-label-lg rounded-full flex items-center justify-center gap-1.5" type="button">${icon('alt_route','text-[20px] text-tertiary')}Add Drop Set</button>
+      </div>
+    </div>
+  `).join('');
 }
 function renderSessionDetail(sessionId, isSummary) {
   const s = state.workoutSessions.find(w => w.id === sessionId);
@@ -2630,6 +2657,7 @@ function renderSessionDetail(sessionId, isSummary) {
   <div class="flex items-center gap-2 pt-2 mb-space-md">
     <a href="${backHref}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     <h2 class="font-headline-lg text-headline-lg text-on-surface flex-1">${isSummary?'Workout Complete':esc(s.sequenceName)}</h2>
+    ${!isSummary ? `<button data-action="toggle-edit-session" data-id="${s.id}" aria-label="${state.ui.editingSessionId===s.id ? 'Done editing' : 'Edit logged workout'}" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container ${state.ui.editingSessionId===s.id ? 'text-primary' : 'text-on-surface-variant'}" type="button">${icon(state.ui.editingSessionId===s.id ? 'check' : 'edit','text-[18px]')}</button>` : ''}
     ${!isSummary ? `<button data-action="open-delete-session" data-id="${s.id}" aria-label="Delete logged workout" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-error" type="button">${icon('delete','text-[18px]')}</button>` : ''}
   </div>
 
@@ -3445,13 +3473,13 @@ const actions = {
     saveState(); rerender();
   },
   'add-set': (ds) => {
-    const e = state.activeSession.exercises[Number(ds.exIdx)];
+    const e = rootSession(ds).exercises[Number(ds.exIdx)];
     const last = e.sets[e.sets.length - 1];
     e.sets.push({ id: uid('set'), type: 'working', weight: last ? last.weight : null, weightLeft: last ? last.weightLeft : null, weightRight: last ? last.weightRight : null, reps: last ? last.reps : null, repsLeft: last ? last.repsLeft : null, repsRight: last ? last.repsRight : null, intensityMethod: last ? last.intensityMethod : 'rpe', intensityValue: null, intensityMethodLeft: last ? last.intensityMethodLeft : 'rpe', intensityValueLeft: null, intensityMethodRight: last ? last.intensityMethodRight : 'rpe', intensityValueRight: null, note: '', completed: false, drops: [] });
     saveState(); rerender();
   },
   'add-drop': (ds) => {
-    const e = state.activeSession.exercises[Number(ds.exIdx)];
+    const e = rootSession(ds).exercises[Number(ds.exIdx)];
     const setIdx = (ds.setIdx !== undefined && ds.setIdx !== '') ? Number(ds.setIdx) : e.sets.length - 1;
     if (setIdx < 0) return;
     const parent = e.sets[setIdx];
@@ -3463,9 +3491,9 @@ const actions = {
     parent.drops.push({ id: uid('set'), type: 'drop', weight: scale(baseW), weightLeft: scale(baseWL), weightRight: scale(baseWR), reps: null, repsLeft: null, repsRight: null, intensityMethod: parent.intensityMethod, intensityValue: null, intensityMethodLeft: parent.intensityMethodLeft, intensityValueLeft: null, intensityMethodRight: parent.intensityMethodRight, intensityValueRight: null, note: '', completed: false });
     saveState(); rerender();
   },
-  'remove-set': (ds) => { state.activeSession.exercises[Number(ds.exIdx)].sets.splice(Number(ds.setIdx), 1); saveState(); rerender(); },
-  'remove-drop': (ds) => { state.activeSession.exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)].drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
-  'set-cycle-type': (ds) => { const s = state.activeSession.exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)]; s.type = s.type === 'working' ? 'warmup' : 'working'; saveState(); rerender(); },
+  'remove-set': (ds) => { rootSession(ds).exercises[Number(ds.exIdx)].sets.splice(Number(ds.setIdx), 1); saveState(); rerender(); },
+  'remove-drop': (ds) => { rootSession(ds).exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)].drops.splice(Number(ds.dropIdx), 1); saveState(); rerender(); },
+  'set-cycle-type': (ds) => { const s = rootSession(ds).exercises[Number(ds.exIdx)].sets[Number(ds.setIdx)]; s.type = s.type === 'working' ? 'warmup' : 'working'; saveState(); rerender(); },
   'adj': (ds) => {
     const path = ds.path, delta = Number(ds.delta), min = (ds.min !== undefined && ds.min !== '') ? Number(ds.min) : null;
     let vOld = getPath(state, path); vOld = (vOld == null || vOld === '' || isNaN(Number(vOld))) ? null : Number(vOld);
@@ -3489,6 +3517,7 @@ const actions = {
     const r = route();
     if (r.parts[0] === 'sequences' && r.parts[1] === ds.id) navigate('#/sequences'); else rerender();
   },
+  'toggle-edit-session': (ds) => { state.ui.editingSessionId = state.ui.editingSessionId === ds.id ? null : ds.id; rerender(); },
   'open-delete-session': (ds) => { state.ui.modal = { type: 'delete-session-confirm', id: ds.id }; rerender(); },
   'delete-session-confirm': (ds) => {
     state.workoutSessions = state.workoutSessions.filter(w => w.id !== ds.id);
