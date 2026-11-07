@@ -325,18 +325,31 @@ function attachDataListeners(traineeUid) {
      log sets into the very same session. This listener briefly echoes a
      write this device just made (see syncToFirebase), which is harmless:
      it just re-applies the same data. */
+  let firstActiveFire = true;
   const activeRef = ref(db, `userData/${traineeUid}/activeSession`);
   const activeCb = onValue(activeRef, snap => {
-    const val = snap.val() || null;
-    if (val) {
-      val.exercises = val.exercises || [];
-      val.exercises.forEach(ex => { ex.sets = ex.sets || []; ex.sets.forEach(set => { set.drops = set.drops || []; }); });
-    }
-    state.activeSession = val;
-    lastSyncedJson.activeSession = JSON.stringify(val);
-    scheduleDataRender();
+    applyActiveSessionSnapshot(snap.val() || null, firstActiveFire);
+    firstActiveFire = false;
   });
   dataListeners.push({ ref: activeRef, cb: activeCb });
+}
+/* the very first fire right after attaching is special: if the server has
+   nothing yet but this device already has a local session (e.g. one started
+   before this live-sync feature shipped, or begun offline and never
+   successfully pushed), the server being empty doesn't mean the session
+   doesn't exist — it means the server just hasn't heard about it yet. Treat
+   the local copy as authoritative in that one case and push it up, instead
+   of silently discarding someone's in-progress workout. Every fire after
+   that really does mean "this session ended." */
+function applyActiveSessionSnapshot(val, isFirstFire) {
+  if (val) {
+    val.exercises = val.exercises || [];
+    val.exercises.forEach(ex => { ex.sets = ex.sets || []; ex.sets.forEach(set => { set.drops = set.drops || []; }); });
+  }
+  if (isFirstFire && !val && state.activeSession) { syncToFirebase(); return; }
+  state.activeSession = val;
+  lastSyncedJson.activeSession = JSON.stringify(val);
+  scheduleDataRender();
 }
 function setViewingTrainee(traineeUid, traineeName) {
   state.viewingTraineeUid = traineeUid;
