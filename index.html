@@ -283,7 +283,14 @@ function normalizeFromFirebase(key, arr) {
   return arr;
 }
 function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; clearTimeout(dataRenderTimer); }
+/* tracks which trainee the Firebase listeners are currently attached for —
+   separate from state.viewingTraineeUid, which setViewingTrainee already
+   updates to the NEW uid before calling this, so comparing against it here
+   would never see the old value. */
+let lastAttachedTraineeUid = null;
 function attachDataListeners(traineeUid) {
+  const switchingTrainee = lastAttachedTraineeUid !== null && lastAttachedTraineeUid !== traineeUid;
+  lastAttachedTraineeUid = traineeUid;
   detachDataListeners();
   lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null, activeSession:null };
   ['exercises','sequences','scheduledSessions','workoutSessions'].forEach(key => {
@@ -296,10 +303,22 @@ function attachDataListeners(traineeUid) {
     });
     dataListeners.push({ ref:r, cb });
   });
+  /* re-attaching for the SAME trainee happens on every auth-token refresh
+     (onAuthStateChanged firing again is normal Firebase behavior, not a
+     bug) — not just when actually switching who you're viewing. Blindly
+     resetting activeSession from this device's local cache every time that
+     happens would stomp an already-correct, already-rendered live session
+     (e.g. a coach's view of his trainee's ongoing workout) back to null
+     until the Firebase listener below catches back up a moment later,
+     producing a visible flash. Only force it to null when truly switching
+     to a different trainee; otherwise leave whatever's already there alone
+     and let localStorage restore it ONLY if it actually has something. */
+  if (switchingTrainee) state.activeSession = null;
   try {
     const raw = localStorage.getItem(`n1_active_${traineeUid}`);
-    state.activeSession = raw ? JSON.parse(raw) : null;
-  } catch(e) { state.activeSession = null; }
+    const local = raw ? JSON.parse(raw) : null;
+    if (local) state.activeSession = local;
+  } catch(e) {}
   /* an ongoing workout now lives in Firebase too (not just this device's
      localStorage), so whoever's connected to this trainee — the trainee
      herself on another device, or her coach — sees it update live and can
