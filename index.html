@@ -982,7 +982,7 @@ function renderInner() {
   const showHeader = navKey === 'home';
   const html = `
     ${showHeader ? renderHeader(screenTitle) : ''}
-    <main class="flex-1 w-full ${showHeader ? 'pt-16' : ''} ${navKey==='workout' ? 'pb-28':'pb-24'} bg-surface px-margin max-w-xl mx-auto">
+    <main class="flex-1 w-full ${showHeader ? 'pt-[calc(4rem+env(safe-area-inset-top,0px))]' : 'pt-safe'} ${navKey==='workout' ? 'pb-28':'pb-24'} bg-surface px-margin max-w-xl mx-auto">
       ${state.activeSession && navKey !== 'workout' ? renderResumeBar() : ''}
       <div class="pb-8">${body}</div>
     </main>
@@ -1896,7 +1896,7 @@ function renderSequencesList() {
   const archived = state.sequences.filter(s=>s.archived && !s.draft);
   const isTrainer = true; // sequence & library editing is open to both roles in this prototype
   return `
-  <div class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md flex items-center justify-between bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+  <div class="sticky top-[env(safe-area-inset-top,0px)] z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md flex items-center justify-between bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <h2 class="font-headline-lg text-headline-lg text-on-surface">Sequences</h2>
     <div class="flex items-center gap-2">
       <a href="#/library" class="h-10 px-3 rounded-full bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5">${icon('menu_book','text-[18px]')}Library</a>
@@ -2002,7 +2002,7 @@ function renderSequenceDetail(seqId) {
     <button data-action="open-delete-sequence" data-id="${s.id}" class="w-full h-11 rounded-full bg-transparent text-error font-label-md text-label-md flex items-center justify-center gap-1.5" type="button">${icon('delete','text-[16px]')}Discard</button>
   ` : `<button data-action="start-workout" data-sequence-id="${s.id}" class="w-full h-12 rounded-full bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2" type="button">${icon('play_arrow','text-[20px]')}Start This Sequence Now</button>`;
   return `
-  <div class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-1 flex items-center gap-2 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+  <div class="sticky top-[env(safe-area-inset-top,0px)] z-30 -mx-margin px-margin pt-2 pb-2 mb-1 flex items-center gap-2 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <a href="#/sequences" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface">${icon('arrow_back','text-[20px]')}</a>
     ${isRenaming ? `
     <input id="f-inline-rename-${s.id}" value="${esc(state.ui.inlineRenameDraft ?? s.name)}" autofocus onkeydown="if(event.key==='Enter'){actions['confirm-inline-rename']({id:'${s.id}'})}else if(event.key==='Escape'){actions['cancel-inline-rename']({})}" class="flex-1 min-w-0 h-10 px-2.5 rounded-lg bg-surface-container-low border ${state.ui.inlineRenameError?'border-error':'border-primary'} text-on-surface font-headline-lg text-headline-lg font-bold">
@@ -2289,7 +2289,7 @@ function renderActiveWorkout() {
     </div>`;
   const elapsed = Math.floor((Date.now()-s.startedAt)/1000);
   return `
-  <div class="sticky top-0 z-30 -mx-margin px-margin py-3 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+  <div class="sticky top-[env(safe-area-inset-top,0px)] z-30 -mx-margin px-margin py-3 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <div class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 min-w-0 flex-1">
         <button data-action="open-workout-overview" aria-label="View overall plan" class="min-h-[44px] min-w-[44px] w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-full transition-colors flex-shrink-0" type="button">${icon('menu','text-[22px]')}</button>
@@ -2697,7 +2697,7 @@ function renderHistory() {
   const exList = state.exercises.filter(e => exCat==='all' || e.category===exCat);
   const allExercisesExpanded = exList.length > 0 && exList.every(e => state.ui.historyExpandedExerciseIds[e.id]);
   return `
-  <div id="history-sticky-header" class="sticky top-0 z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+  <div id="history-sticky-header" class="sticky top-[env(safe-area-inset-top,0px)] z-30 -mx-margin px-margin pt-2 pb-2 mb-space-md bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
     <div class="flex items-center justify-between pb-2">
       <h2 class="font-headline-lg text-headline-lg text-on-surface">History</h2>
     </div>
@@ -2857,7 +2857,7 @@ function renderHistoryExercisePicker() {
             ${icon(expanded?'expand_less':'expand_more','text-[22px] text-on-surface-variant flex-shrink-0')}
           </button>`;
         if (!expanded) return `<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">${toggleBtn}</div>`;
-        return renderExerciseHistoryBody(e.id, toggleBtn, 'var(--history-sticky-h, 0px)');
+        return renderExerciseHistoryBody(e.id, toggleBtn, 'calc(env(safe-area-inset-top,0px) + var(--history-sticky-h, 0px))');
       }).join('')}
   </div>
   `;
