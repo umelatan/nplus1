@@ -258,7 +258,7 @@ function scheduleDataRender() {
   clearTimeout(dataRenderTimer);
   dataRenderTimer = setTimeout(() => { rerender(); }, 120);
 }
-let lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null };
+let lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null, activeSession:null };
 /* the Realtime Database silently drops any key whose value is an empty array/object
    on write (it can't store a childless node) — so e.g. a freshly-added sequence
    exercise's `prescription.drops: []` comes back as `drops: undefined` after a
@@ -285,7 +285,7 @@ function normalizeFromFirebase(key, arr) {
 function detachDataListeners() { dataListeners.forEach(({ref:r, cb}) => off(r, 'value', cb)); dataListeners = []; clearTimeout(dataRenderTimer); }
 function attachDataListeners(traineeUid) {
   detachDataListeners();
-  lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null };
+  lastSyncedJson = { exercises:null, sequences:null, scheduledSessions:null, workoutSessions:null, activeSession:null };
   ['exercises','sequences','scheduledSessions','workoutSessions'].forEach(key => {
     const r = ref(db, `userData/${traineeUid}/${key}`);
     const cb = onValue(r, snap => {
@@ -300,6 +300,24 @@ function attachDataListeners(traineeUid) {
     const raw = localStorage.getItem(`n1_active_${traineeUid}`);
     state.activeSession = raw ? JSON.parse(raw) : null;
   } catch(e) { state.activeSession = null; }
+  /* an ongoing workout now lives in Firebase too (not just this device's
+     localStorage), so whoever's connected to this trainee — the trainee
+     herself on another device, or her coach — sees it update live and can
+     log sets into the very same session. This listener briefly echoes a
+     write this device just made (see syncToFirebase), which is harmless:
+     it just re-applies the same data. */
+  const activeRef = ref(db, `userData/${traineeUid}/activeSession`);
+  const activeCb = onValue(activeRef, snap => {
+    const val = snap.val() || null;
+    if (val) {
+      val.exercises = val.exercises || [];
+      val.exercises.forEach(ex => { ex.sets = ex.sets || []; ex.sets.forEach(set => { set.drops = set.drops || []; }); });
+    }
+    state.activeSession = val;
+    lastSyncedJson.activeSession = JSON.stringify(val);
+    scheduleDataRender();
+  });
+  dataListeners.push({ ref: activeRef, cb: activeCb });
 }
 function setViewingTrainee(traineeUid, traineeName) {
   state.viewingTraineeUid = traineeUid;
@@ -319,11 +337,29 @@ function syncToFirebase() {
       const json = JSON.stringify(arrayToObj(state[key]));
       if (json !== lastSyncedJson[key]) { payload[key] = JSON.parse(json); lastSyncedJson[key] = json; }
     });
+    /* activeSession is a single object (or null), not an id-keyed collection,
+       so it doesn't go through arrayToObj — written and diffed as-is. */
+    const activeJson = JSON.stringify(state.activeSession || null);
+    if (activeJson !== lastSyncedJson.activeSession) { payload.activeSession = state.activeSession || null; lastSyncedJson.activeSession = activeJson; }
     if (Object.keys(payload).length === 0) return;
     update(ref(db, `userData/${state.viewingTraineeUid}`), payload).catch(e => console.error('Firebase sync failed', e));
   }, 500);
 }
+/* called on every save made while actually looking at the workout screen —
+   i.e. every real edit to it, from either side. Registers whoever just made
+   that edit as a co-logger if they're not already the original logger, so
+   "Logged by" ends up naming everyone who actually contributed (see
+   performedByDisplay), not just whoever happened to start the session. */
+function noteSessionContributor() {
+  const s = state.activeSession;
+  if (!s || !location.hash.startsWith('#/workout')) return;
+  const name = myName();
+  if (!name || name === s.performedByName) return;
+  s.coLoggedNames = s.coLoggedNames || [];
+  if (!s.coLoggedNames.includes(name)) s.coLoggedNames.push(name);
+}
 function saveState() {
+  noteSessionContributor();
   if (state.viewingTraineeUid) {
     try {
       if (state.activeSession) localStorage.setItem(`n1_active_${state.viewingTraineeUid}`, JSON.stringify(state.activeSession));
@@ -530,8 +566,16 @@ function plannedByDisplay(s) {
 /* same problem, same fix, for "Logged by" on a completed workout session:
    newly logged sessions snapshot the logger's actual name (performedByName).
    A legacy session without one falls back to the generic label, not a live
-   lookup (see createdByDisplay above for why). */
-function performedByDisplay(s) { return (s && s.performedByName) || (s && s.performedBy === 'client' && roleName('client')) || (s ? 'Trainer' : ''); }
+   lookup (see createdByDisplay above for why). An ongoing session can also
+   gain co-loggers (coLoggedNames) if someone besides the original logger —
+   e.g. a coach viewing a trainee's live session — also logs sets into it;
+   they're all credited, joined with "&". */
+function performedByDisplay(s) {
+  if (!s) return '';
+  const names = [s.performedByName, ...(s.coLoggedNames||[])].filter(Boolean);
+  if (names.length) return names.join(' & ');
+  return (s.performedBy === 'client' && roleName('client')) || 'Trainer';
+}
 
 function upcomingScheduled() {
   return state.scheduledSessions.filter(s => s.status === 'planned' && s.date >= todayISO()).sort((a,b)=>a.date.localeCompare(b.date));
@@ -758,7 +802,12 @@ window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); }
    lands wherever the hash happened to be left from the previous session,
    e.g. the Calendar, instead of a predictable starting point. */
 window.addEventListener('DOMContentLoaded', () => { applyTheme(); location.hash = '#/home'; render(); });
-window.addEventListener('beforeunload', (e) => { if (state.activeSession) { e.preventDefault(); e.returnValue = ''; } });
+/* scoped to the workout route, not just state.activeSession — now that a
+   session can be visible on a coach's device without them being the one who
+   started it, warning them on every page (not just the workout screen) the
+   moment the trainee has a session going would be a constant, unrelated
+   nuisance. */
+window.addEventListener('beforeunload', (e) => { if (state.activeSession && location.hash.startsWith('#/workout')) { e.preventDefault(); e.returnValue = ''; } });
 
 function applyTheme() { document.documentElement.classList.toggle('dark', state.ui.theme === 'dark'); }
 
@@ -2169,7 +2218,7 @@ function finalizeActiveSession() {
   const s = state.activeSession;
   const finished = {
     id: s.id, sequenceId: s.sequenceId, sequenceName: s.sequenceName, scheduledSessionId: s.scheduledSessionId,
-    date: s.date, startedAt: s.startedAt, durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000), performedBy: s.performedBy, performedByName: s.performedByName,
+    date: s.date, startedAt: s.startedAt, durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000), performedBy: s.performedBy, performedByName: s.performedByName, coLoggedNames: s.coLoggedNames,
     reviewedByTrainer: s.performedBy === 'trainer', trainerNote: null, clientNoteForTrainer: '',
     exercises: s.exercises.map(e => clone(e)),
   };
